@@ -10,7 +10,9 @@ visitor log.
 ```
 .
 ├── docs/
-│   └── ER_design.md      # Entities, attributes, relationships, normalization notes
+│   ├── ER_design.md       # Entities, attributes, relationships, normalization notes
+│   ├── ER_diagram.mmd     # Mermaid source for the ER diagram (render at mermaid.live)
+│   └── normalization.md   # Full 1NF/2NF/3NF justification for the report
 ├── sql/
 │   ├── 01_schema.sql      # PostgreSQL DDL (tables, types, constraints)
 │   ├── 02_sample_data.sql # Sample seed data for demo/testing
@@ -36,5 +38,7 @@ psql -d hostel_management -f sql/03_queries.sql
 
 - [x] Entity list and ER design drafted
 - [x] Schema DDL written
-- [ ] ER diagram drawn (visual)
-- [ ] Report written
+- [x] ER diagram drawn (see `docs/ER_diagram.mmd`)
+- [x] Normalization write-up drafted (see `docs/normalization.md`)
+- [ ] Schema run against a real PostgreSQL instance and extra queries added
+- [ ] Final report assembled

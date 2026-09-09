@@ -29,3 +29,27 @@ FROM room r
 JOIN hostel h ON h.hostel_id = r.hostel_id
 LEFT JOIN booking b ON b.room_id = r.room_id AND b.status = 'active'
 WHERE b.booking_id IS NULL;
+
+-- Full payment history for a given student (e.g. student_id = 1)
+SELECT b.academic_year, b.semester, p.amount, p.payment_date, p.status
+FROM payment p
+JOIN booking b ON b.booking_id = p.booking_id
+WHERE b.student_id = 1
+ORDER BY p.payment_date;
+
+-- Maintenance workload per staff member
+SELECT s.first_name, s.last_name, COUNT(m.request_id) AS assigned_requests
+FROM staff s
+LEFT JOIN maintenance_request m ON m.staff_id = s.staff_id
+GROUP BY s.staff_id, s.first_name, s.last_name
+ORDER BY assigned_requests DESC;
+
+-- Outstanding balance per booking (expected price vs amount paid so far)
+SELECT b.booking_id, s.first_name, s.last_name, r.price_per_semester,
+       COALESCE(SUM(p.amount), 0) AS paid_so_far,
+       r.price_per_semester - COALESCE(SUM(p.amount), 0) AS balance
+FROM booking b
+JOIN student s ON s.student_id = b.student_id
+JOIN room r ON r.room_id = b.room_id
+LEFT JOIN payment p ON p.booking_id = b.booking_id
+GROUP BY b.booking_id, s.first_name, s.last_name, r.price_per_semester;

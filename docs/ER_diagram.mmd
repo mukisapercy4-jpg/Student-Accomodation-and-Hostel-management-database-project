@@ -1,0 +1,89 @@
+%% Student Accommodation and Hostel Management System — ER Diagram
+%% Render at https://mermaid.live, or with the Mermaid VS Code extension,
+%% or `mmdc -i ER_diagram.mmd -o ER_diagram.png` (mermaid-cli) for the report.
+
+erDiagram
+  HOSTEL ||--o{ ROOM : contains
+  STAFF ||--o| HOSTEL : manages
+  STUDENT ||--o{ BOOKING : makes
+  ROOM ||--o{ BOOKING : hosts
+  BOOKING ||--o{ PAYMENT : has
+  ROOM ||--o{ MAINTENANCE_REQUEST : has
+  STUDENT ||--o{ MAINTENANCE_REQUEST : reports
+  STAFF ||--o{ MAINTENANCE_REQUEST : assigned_to
+  STUDENT ||--o{ VISITOR : receives
+
+  STUDENT {
+    int student_id PK
+    string reg_number
+    string first_name
+    string last_name
+    string gender
+    string phone
+    string email
+    string program
+    int year_of_study
+    string national_id
+  }
+  HOSTEL {
+    int hostel_id PK
+    string name
+    string gender_category
+    string address
+    int warden_id FK
+  }
+  STAFF {
+    int staff_id PK
+    string first_name
+    string last_name
+    string role
+    string phone
+    string email
+  }
+  ROOM {
+    int room_id PK
+    int hostel_id FK
+    string room_number
+    string room_type
+    int capacity
+    numeric price_per_semester
+  }
+  BOOKING {
+    int booking_id PK
+    int student_id FK
+    int room_id FK
+    string academic_year
+    int semester
+    date check_in_date
+    date check_out_date
+    string status
+  }
+  PAYMENT {
+    int payment_id PK
+    int booking_id FK
+    numeric amount
+    date payment_date
+    string payment_method
+    string receipt_number
+    string status
+  }
+  MAINTENANCE_REQUEST {
+    int request_id PK
+    int room_id FK
+    int student_id FK
+    int staff_id FK
+    string description
+    date date_reported
+    date date_resolved
+    string status
+  }
+  VISITOR {
+    int visitor_id PK
+    int student_id FK
+    string visitor_name
+    string national_id
+    date visit_date
+    time time_in
+    time time_out
+    string purpose
+  }
