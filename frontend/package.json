@@ -1,5 +1,5 @@
 {
-  "name": "frontend",
+  "name": "sahms-frontend",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -11,7 +11,8 @@
   },
   "dependencies": {
     "react": "^19.3.1",
-    "react-dom": "^19.3.1"
+    "react-dom": "^19.3.1",
+    "lucide-react": "^0.468.0"
   },
   "devDependencies": {
     "@types/react": "^19.3.0",

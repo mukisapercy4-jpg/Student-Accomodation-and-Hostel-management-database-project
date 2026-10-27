@@ -1,122 +1,22 @@
-import { useState } from 'react'
-import heroImg from './assets/hero.png'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import './App.css'
-
-function App() {
-  const [count, setCount] = useState(0)
-
-  return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
-
-      <div className="ticks"></div>
-
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
-  )
+import {useEffect,useState} from 'react';
+import {LayoutDashboard,Users,Building2,BedDouble,ClipboardList,CreditCard,Wrench,UserRound,Search,Bell,Plus,ArrowUpRight,ArrowDownRight,MoreHorizontal,CalendarDays,Download,Menu,CheckCircle2,Clock3,MapPin,Filter,ChevronDown} from 'lucide-react';
+import './App.css';
+const API=import.meta.env.VITE_API_BASE_URL||'http://127.0.0.1:8000/api';
+const nav=[['Dashboard',LayoutDashboard],['Students',Users],['Hostels',Building2],['Rooms',BedDouble],['Bookings',ClipboardList],['Payments',CreditCard],['Maintenance',Wrench],['Visitors',UserRound]];
+const demoHostels=[{hostel_id:1,name:'Pearl Hostel',address:'Main campus area',occupancy:82},{hostel_id:2,name:'Victoria Hostel',address:'University neighbourhood',occupancy:74},{hostel_id:3,name:'Nile Hostel',address:'Near campus',occupancy:68}];
+const bookings=[['JM','John Mukasa','STU-2026-001','Pearl Hostel','A-104','Oct 21, 2026','UGX 450,000','Confirmed'],['AN','Alice Namuli','STU-2026-002','Victoria Hostel','B-203','Oct 20, 2026','UGX 380,000','Pending'],['PK','Peter Kato','STU-2026-003','Nile Hostel','C-105','Oct 20, 2026','UGX 420,000','Confirmed'],['SN','Sarah Nakitto','STU-2026-004','Pearl Hostel','A-210','Oct 19, 2026','UGX 450,000','Cancelled']];
+function Stat({icon:Icon,title,value,change,note,tone,down=false}){return <article className="stat"><div className="stathead"><span className={'staticon '+tone}><Icon size={20}/></span><MoreHorizontal size={19} color="#98a2b3"/></div><p>{title}</p><div className="statvalue">{value}<span className={down?'down':'up'}>{down?<ArrowDownRight size={13}/>:<ArrowUpRight size={13}/>} {change}</span></div><small>{note}</small></article>}
+export default function App(){
+ const [hostels,setHostels]=useState(demoHostels),[api,setApi]=useState('loading'),[active,setActive]=useState('Dashboard'),[q,setQ]=useState(''),[notice,setNotice]=useState('');
+ useEffect(()=>{fetch(`${API}/hostels/`).then(r=>{if(!r.ok)throw Error();return r.json()}).then(d=>{let rows=Array.isArray(d)?d:d.results;if(rows?.length){setHostels(rows.map((h,i)=>({...h,occupancy:h.occupancy??[82,74,68][i%3]})));setApi('connected')}else setApi('fallback')}).catch(()=>setApi('fallback'))},[]);
+ const filtered=bookings.filter(b=>b.join(' ').toLowerCase().includes(q.toLowerCase()));
+ return <div className="layout"><aside className="sidebar"><div className="brand"><span><Building2 size={23}/></span><div><b>SAHMS</b><small>HOSTEL MANAGEMENT</small></div></div><p className="label">WORKSPACE</p><nav>{nav.map(([name,Icon])=><button key={name} className={active===name?'selected':''} onClick={()=>{setActive(name);setNotice(name==='Dashboard'?'':`${name} module selected. Connect this section to its full module screen next.`)}}><Icon size={18}/>{name}{name==='Maintenance'&&<i>3</i>}</button>)}</nav><div className="sidebarfoot"><div className="help"><b>Need help?</b><p>Visit the help centre for tips and support.</p><a onClick={()=>setNotice('Please contact your system administrator for support.')}>Open help centre ↗</a></div><div className="admin"><span>AD</span><div><b>System Admin</b><small>Administrator</small></div><MoreHorizontal/></div></div></aside>
+ <main><header><div className="crumb">Workspace <span>/</span> <b>{active}</b></div><div className="headright"><label><Search size={16}/><input placeholder="Search bookings..." value={q} onChange={e=>setQ(e.target.value)}/></label><button className="bell" onClick={()=>setNotice('You are all caught up. No new notifications.')}><Bell size={19}/><i/></button><div className="user"><span>AD</span><div><b>Admin</b><small>Administrator</small></div><ChevronDown size={15}/></div></div></header>
+ <div className="content"><div className="welcome"><div><p className="eyebrow">● MANAGEMENT OVERVIEW</p><h1>{active==='Dashboard'?'Good morning, Admin':active}</h1><p className="sub">Here's what's happening across your student accommodation today.</p></div><div className="actions"><button className="secondary" onClick={()=>setNotice('Report export will be connected to the reporting module.')}><Download size={15}/> Export report</button><button className="primary" onClick={()=>setNotice('Create workflow selected. Connect the relevant module form to save records.')}><Plus size={16}/> Create new</button></div></div>
+ {notice&&<div className="notice">{notice}<button onClick={()=>setNotice('')}>×</button></div>}
+ <section className="stats"><Stat icon={Users} title="Total students" value="1,284" change="+12.8%" note="Compared to last semester" tone="blue"/><Stat icon={Building2} title="Registered hostels" value={String(Math.max(hostels.length,3)).padStart(2,'0')} change="+2 new" note="Across all accommodation" tone="purple"/><Stat icon={BedDouble} title="Room occupancy" value="78.4%" change="+4.2%" note="Compared to last month" tone="green"/><Stat icon={CreditCard} title="Pending payments" value="UGX 8.42M" change="8.6%" note="Outstanding balances" tone="orange" down/></section>
+ <section className="middle"><article className="panel"><div className="panelhead"><div><h2>Occupancy overview</h2><p>Room utilisation across all hostels</p></div><button className="filter" onClick={()=>setNotice('Showing occupancy for the current semester.')}><CalendarDays size={14}/> This semester⌄</button></div><div className="occupancy"><div><strong>78.4%</strong><small>● Overall occupancy</small></div><div className="legend"><span>■ Occupied</span><span>■ Available</span></div></div><div className="chart"><div className="yaxis"><span>100%</span><span>75%</span><span>50%</span><span>25%</span><span>0%</span></div><div className="plot"><div className="gridlines"><i/><i/><i/><i/><i/></div><div className="bars">{[['May',61],['Jun',69],['Jul',64],['Aug',76],['Sep',72],['Oct',78]].map(([m,v])=><div className="bar" key={m}><div className="bartrack"><span style={{height:v+'%'}}><b>{v}%</b></span></div><small>{m}</small></div>)}</div></div></div><div className="chartfoot">✓ Occupancy is up <b>4.2%</b> compared to last month.<a onClick={()=>setActive('Hostels')}>View details ↗</a></div></article>
+ <article className="panel"><div className="panelhead"><div><h2>Recent activity</h2><p>Latest updates from your system</p></div><MoreHorizontal size={19}/></div><div className="activity">{[['blue',ClipboardList,'New booking request','John Mukasa requested Pearl Hostel, Room A-104.','12 minutes ago'],['green',CreditCard,'Payment received','UGX 450,000 payment recorded successfully.','48 minutes ago'],['orange',Wrench,'Maintenance reported','Water tap repair reported in Room B-203.','2 hours ago'],['purple',Users,'Student registered','A new student profile was added.','Yesterday']].map(([tone,Icon,title,desc,time])=><div className="activityrow" key={title}><span className={'activityicon '+tone}><Icon size={16}/></span><div><b>{title}</b><p>{desc}</p><small>{time}</small></div></div>)}</div><button className="allactivity" onClick={()=>setNotice('Activity history will be connected to the audit log.')}>View all activity ↗</button></article></section>
+ <section className="panel hostels"><div className="panelhead"><div><h2>Hostel performance</h2><p>Occupancy and capacity at a glance</p></div><button className="textbutton" onClick={()=>setActive('Hostels')}>View all hostels ↗</button></div><div className="hostelgrid">{hostels.slice(0,3).map((h,i)=><article className="hostelcard" key={h.hostel_id||h.id||h.name}><div className={'building ill'+i}><span>HOSTEL {String(i+1).padStart(2,'0')}</span><div className="buildingart">{Array.from({length:9},(_,j)=><i key={j}/>)}</div><MoreHorizontal/></div><div className="hostelinfo"><div className="hosteltitle"><h3>{h.name||`Hostel ${i+1}`}</h3><span>● Active</span></div><p className="location"><MapPin size={13}/>{h.address||'Campus accommodation'}</p><div className="metrics"><div><small>Occupancy</small><b>{h.occupancy}%</b></div><div><small>Warden</small><b>{h.warden_name||h.warden_full_name||'Assigned warden'}</b></div></div><div className="progress"><i style={{width:(h.occupancy||0)+'%'}}/></div><button className="detail" onClick={()=>setNotice(`${h.name}: hostel details selected. Connect this card to the hostel detail page.`)}>View hostel details ↗</button></div></article>)}</div><div className={'apinote '+(api==='connected'?'good':'')}><i/>{api==='loading'?'Connecting to Django API…':api==='connected'?'Live hostel records loaded from the Django API.':'Preview data shown. Start Django and check CORS to load live hostel records.'}{api!=='connected'&&<button onClick={()=>location.reload()}>↻ Retry</button>}</div></section>
+ <section className="panel bookings"><div className="panelhead"><div><h2>Recent bookings</h2><p>Latest student accommodation requests</p></div><button className="filter" onClick={()=>setNotice('Booking filters will be connected to the bookings API.')}><Filter size={14}/> Filter</button></div><div className="tablewrap"><table><thead><tr><th>STUDENT</th><th>HOSTEL / ROOM</th><th>BOOKING DATE</th><th>AMOUNT</th><th>STATUS</th><th/></tr></thead><tbody>{filtered.map(b=><tr key={b[2]}><td><div className="student"><span>{b[0]}</span><div><b>{b[1]}</b><small>{b[2]}</small></div></div></td><td><b>{b[3]}</b><small>{b[4]}</small></td><td>{b[5]}</td><td><b>{b[6]}</b></td><td><span className={'status '+b[7].toLowerCase()}>{b[7]==='Confirmed'?<CheckCircle2 size={12}/>:<Clock3 size={12}/>} {b[7]}</span></td><td><MoreHorizontal size={17}/></td></tr>)}{!filtered.length&&<tr><td colSpan="6" className="empty">No bookings match “{q}”.</td></tr>}</tbody></table></div><div className="tablefoot">Showing <b>{filtered.length}</b> of <b>5</b> recent bookings<div><button disabled>Previous</button><button className="current">1</button><button onClick={()=>setNotice('More booking records will appear when the bookings API is connected.')}>Next</button></div></div></section><footer>© 2026 SAHMS · Student Accommodation & Hostel Management System <span>Built for better campus living ♥</span></footer></div></main></div>
 }
-
-export default App
