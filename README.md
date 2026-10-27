@@ -31,7 +31,8 @@ psql -d hostel_management -f sql/03_queries.sql
 
 ## Team
 
-- Mukisa (Kagabane Peace)
+- Mukisa
+  
 - (add teammates here)
 
 ## Status
