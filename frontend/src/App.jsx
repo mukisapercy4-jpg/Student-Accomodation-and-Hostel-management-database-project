@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   LayoutDashboard, Users, Building2, BedDouble, ClipboardList, CreditCard, Wrench,
-  UserRound, Search, MapPin, LogOut, Clock3, CheckCircle2, Eye, X, Download, RefreshCw,
+  UserRound, Search, MapPin, LogOut, Clock3, CheckCircle2, Eye, X, Download, RefreshCw, Plus, Pencil,
 } from 'lucide-react';
 import './App.css';
 import { api, ApiError, fetchAll, money, toCsv, tokenStore } from './api.js';
+import { FORMS, RecordForm } from './forms.jsx';
 
 const NAV = [
   ['Dashboard', LayoutDashboard, null],
@@ -23,10 +24,10 @@ const COLUMNS = {
   hostels: [['name', 'Hostel'], ['address', 'Address'], ['warden_name', 'Warden'], ['capacity', 'Capacity'], ['occupied_spaces', 'Occupied'], ['occupancy', 'Occupancy %']],
   rooms: [['hostel_name', 'Hostel'], ['room_number', 'Room'], ['capacity', 'Capacity'], ['occupied_spaces', 'Occupied'], ['price_per_semester', 'Price / semester']],
   bookings: [['student_reg_number', 'Reg no.'], ['student_name', 'Student'], ['hostel_name', 'Hostel'], ['room_number', 'Room'], ['start_date', 'Start'], ['end_date', 'End'], ['status', 'Status'], ['agreed_price', 'Agreed price']],
-  payments: [['payment_id', 'ID'], ['booking', 'Booking'], ['amount', 'Amount'], ['payment_date', 'Date'], ['payment_method', 'Method'], ['reference_number', 'Reference'], ['payment_status', 'Status']],
-  maintenance: [['request_id', 'ID'], ['room', 'Room ID'], ['description', 'Description'], ['priority', 'Priority'], ['status', 'Status'], ['request_date', 'Requested']],
+  payments: [['payment_id', 'ID'], ['student_name', 'Student'], ['booking_label', 'Booking'], ['amount', 'Amount'], ['payment_date', 'Date'], ['payment_method', 'Method'], ['reference_number', 'Reference'], ['payment_status', 'Status']],
+  maintenance: [['request_id', 'ID'], ['room_label', 'Room'], ['reported_by_name', 'Reported by'], ['assigned_to_name', 'Assigned to'], ['description', 'Description'], ['priority', 'Priority'], ['status', 'Status'], ['request_date', 'Requested']],
   staff: [['first_name', 'First name'], ['last_name', 'Last name'], ['role', 'Role'], ['phone', 'Phone'], ['email', 'Email'], ['employment_date', 'Employed']],
-  visitors: [['visitor_name', 'Visitor'], ['booking', 'Booking'], ['visit_date', 'Date'], ['check_in_time', 'In'], ['check_out_time', 'Out'], ['purpose', 'Purpose']],
+  visitors: [['visitor_name', 'Visitor'], ['student_name', 'Visiting'], ['room_label', 'Room'], ['visit_date', 'Date'], ['check_in_time', 'In'], ['check_out_time', 'Out'], ['purpose', 'Purpose']],
 };
 const MONEY_FIELDS = new Set(['agreed_price', 'amount', 'price_per_semester']);
 
@@ -71,10 +72,10 @@ function Stat({ icon: Icon, title, value, note, tone }) {
   );
 }
 
-const statusClass = (s) => ({ Active: 'confirmed', Completed: 'confirmed', Pending: 'pending', Cancelled: 'cancelled' }[s] || 'pending');
+const statusClass = (s) => ({ Active: 'confirmed', Completed: 'confirmed', Pending: 'pending', 'In Progress': 'pending', Cancelled: 'cancelled', Failed: 'cancelled', Refunded: 'cancelled' }[s] || 'pending');
 
 function BookingStatus({ s }) {
-  return <span className={`status ${statusClass(s)}`}>{s === 'Pending' ? <Clock3 size={12} /> : <CheckCircle2 size={12} />} {s}</span>;
+  return <span className={`status ${statusClass(s)}`}>{['Pending', 'In Progress'].includes(s) ? <Clock3 size={12} /> : <CheckCircle2 size={12} />} {s}</span>;
 }
 
 function Dashboard({ data, can }) {
@@ -192,12 +193,19 @@ function Details({ record, onClose }) {
   );
 }
 
-function ModuleTable({ resource, q, name }) {
+function ModuleTable({ resource, q, name, me }) {
   const [state, setState] = useState({ loading: true, rows: [], count: 0, error: '' });
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState(null);
   const [exporting, setExporting] = useState(false);
   const [tick, setTick] = useState(0);
+  const [form, setForm] = useState(null); // {record?}
+  const [flash, setFlash] = useState('');
+  const perms = me.permissions[resource] || [];
+  const canCreate = perms.includes('create') && !!FORMS[resource];
+  const canUpdate = perms.includes('update');
+  const isAdmin = me.roles.includes('Admin');
+  const pageSize = state.rows.length && state.count > state.rows.length ? state.pageSize : 25;
 
   useEffect(() => { setPage(1); }, [q, resource]);
 
@@ -207,7 +215,7 @@ function ModuleTable({ resource, q, name }) {
     const params = new URLSearchParams({ page: String(page) });
     if (q) params.set('search', q);
     api(`/${resource}/?${params}`)
-      .then((d) => live && setState({ loading: false, rows: d.results, count: d.count, error: '' }))
+      .then((d) => live && setState({ loading: false, rows: d.results, count: d.count, pageSize: d.results.length > 0 && d.next ? d.results.length : 25, error: '' }))
       .catch((e) => live && setState({ loading: false, rows: [], count: 0, error: e.message }));
     return () => { live = false; };
   }, [resource, page, q, tick]);
@@ -223,14 +231,39 @@ function ModuleTable({ resource, q, name }) {
     } catch (e) { setState((s) => ({ ...s, error: e.message })); } finally { setExporting(false); }
   };
 
+  const act = async (path, body, okMsg) => {
+    try { await api(path, { method: 'POST', body: body ? JSON.stringify(body) : undefined }); setFlash(okMsg); setTick((t) => t + 1); }
+    catch (e) { setState((s) => ({ ...s, error: e.message })); }
+  };
+  const patchStatus = async (id, status) => {
+    try { await api(`/${resource}/${id}/`, { method: 'PATCH', body: JSON.stringify({ payment_status: status }) }); setFlash(`Payment marked ${status}.`); setTick((t) => t + 1); }
+    catch (e) { setState((s) => ({ ...s, error: e.message })); }
+  };
+  const rowActions = (r) => {
+    if (!canUpdate) return null;
+    if (resource === 'bookings' && ['Pending', 'Active'].includes(r.status)) {
+      return <button className="linkbtn danger" onClick={() => window.confirm(`Cancel booking #${r.booking_id} for ${r.student_name}?`) && act(`/bookings/${r.booking_id}/cancel/`, null, 'Booking cancelled.')}>Cancel</button>;
+    }
+    if (resource === 'payments') {
+      const next = { Pending: ['Completed', 'Failed'], Completed: ['Refunded'] }[r.payment_status] || [];
+      return next.map((n) => <button key={n} className="linkbtn" onClick={() => window.confirm(`Mark payment ${r.payment_id} as ${n}?`) && patchStatus(r.payment_id, n)}>{n}</button>);
+    }
+    if (['students', 'maintenance', 'visitors'].includes(resource)) {
+      return <button className="iconbtn" title="Edit" onClick={() => setForm({ record: r })}><Pencil size={15} /></button>;
+    }
+    return null;
+  };
+
   const cols = COLUMNS[resource];
   return (
     <section className="panel bookings">
       <div className="panelhead"><div><h2>{name}</h2><p>{state.loading ? 'Loading…' : `${state.count} record(s)${q ? ` matching “${q}”` : ''}`}</p></div>
         <div className="actions">
+          {canCreate && <button className="primary" onClick={() => setForm({})}><Plus size={14} /> New {FORMS[resource].noun}</button>}
           <button className="secondary" onClick={() => setTick((t) => t + 1)}><RefreshCw size={14} /> Refresh</button>
           <button className="secondary" onClick={exportCsv} disabled={exporting || state.count === 0}><Download size={14} /> {exporting ? 'Exporting…' : 'Export CSV'}</button>
         </div></div>
+      {flash && <div className="notice good">{flash}<button onClick={() => setFlash('')}>×</button></div>}
       {state.error && (
         <div className="notice">Could not load {name.toLowerCase()}: {state.error}
           <button onClick={() => setTick((t) => t + 1)}>Retry</button></div>
@@ -241,7 +274,7 @@ function ModuleTable({ resource, q, name }) {
           {state.rows.map((r, i) => (
             <tr key={i}>{cols.map(([k]) => (
               <td key={k}>{k.endsWith('status') || k === 'status' ? <BookingStatus s={r[k]} /> : show(k, r[k])}</td>
-            ))}<td><button className="iconbtn" title="View details" onClick={() => setSelected(r)}><Eye size={16} /></button></td></tr>
+            ))}<td className="rowactions">{rowActions(r)}<button className="iconbtn" title="View details" onClick={() => setSelected(r)}><Eye size={16} /></button></td></tr>
           ))}
           {!state.loading && !state.error && state.rows.length === 0 && <tr><td colSpan={cols.length + 1} className="empty">No records.</td></tr>}
         </tbody>
@@ -250,9 +283,10 @@ function ModuleTable({ resource, q, name }) {
         <div>
           <button disabled={page === 1} onClick={() => setPage(page - 1)}>Previous</button>
           <button className="current">{page}</button>
-          <button disabled={page * 25 >= state.count} onClick={() => setPage(page + 1)}>Next</button>
+          <button disabled={page * pageSize >= state.count} onClick={() => setPage(page + 1)}>Next</button>
         </div>
       </div>
+      {form && <RecordForm resource={resource} record={form.record} isAdmin={isAdmin} onClose={() => setForm(null)} onSaved={(m) => { setForm(null); setFlash(m); setTick((t) => t + 1); }} />}
       {selected && <Details record={selected} onClose={() => setSelected(null)} />}
     </section>
   );
@@ -310,7 +344,7 @@ export default function App() {
           {active === 'Dashboard' && dash.loading && !dash.data && <p>Loading dashboard…</p>}
           {active === 'Dashboard' && dash.error && <div className="notice">Could not load the dashboard: {dash.error}</div>}
           {active === 'Dashboard' && dash.data && <Dashboard data={dash.data} can={can} />}
-          {resource && <ModuleTable resource={resource} q={q} name={active} />}
+          {resource && <ModuleTable key={resource} resource={resource} q={q} name={active} me={me} />}
         </div>
       </main>
     </div>

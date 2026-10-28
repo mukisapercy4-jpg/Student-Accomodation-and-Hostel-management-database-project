@@ -55,11 +55,12 @@ export async function api(path, options = {}) {
 }
 
 /** Every page of a list endpoint (the API paginates at 25; 100 per request here). */
-export async function fetchAll(resource, search = '', maxPages = 100) {
+export async function fetchAll(resource, search = '', maxPages = 100, extra = {}) {
   const rows = [];
   for (let page = 1; page <= maxPages; page += 1) {
     const params = new URLSearchParams({ page: String(page), page_size: '100' });
     if (search) params.set('search', search);
+    Object.entries(extra).forEach(([k, v]) => params.set(k, v));
     const d = await api(`/${resource}/?${params}`);
     rows.push(...d.results);
     if (!d.next) return rows;

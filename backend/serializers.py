@@ -181,11 +181,22 @@ class BookingSerializer(serializers.ModelSerializer):
 
 
 class PaymentSerializer(serializers.ModelSerializer):
+    student_name = serializers.SerializerMethodField()
+    booking_label = serializers.SerializerMethodField()
+
     class Meta:
         model = Payment
-        fields = ["payment_id", "booking", "amount", "payment_date",
-                  "payment_method", "reference_number", "payment_status"]
+        fields = ["payment_id", "booking", "booking_label", "student_name", "amount",
+                  "payment_date", "payment_method", "reference_number", "payment_status"]
         extra_kwargs = {"payment_date": {"required": False}}
+
+    def get_student_name(self, obj):
+        st = obj.booking.student
+        return f"{st.first_name} {st.last_name}"
+
+    def get_booking_label(self, obj):
+        b = obj.booking
+        return f"#{b.booking_id} · {b.room.hostel.name} {b.room.room_number}"
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
@@ -226,13 +237,30 @@ class PaymentSerializer(serializers.ModelSerializer):
 
 
 class MaintenanceRequestSerializer(serializers.ModelSerializer):
+    room_label = serializers.SerializerMethodField()
+    reported_by_name = serializers.SerializerMethodField()
+    assigned_to_name = serializers.SerializerMethodField()
+
     class Meta:
         model = MaintenanceRequest
-        fields = ["request_id", "room", "reported_by_student", "description",
-                  "request_date", "priority", "status", "assigned_to",
-                  "completion_date"]
+        fields = ["request_id", "room", "room_label", "reported_by_student",
+                  "reported_by_name", "description", "request_date", "priority",
+                  "status", "assigned_to", "assigned_to_name", "completion_date"]
+        extra_kwargs = {"request_date": {"required": False}}
+
+    def get_room_label(self, obj):
+        return f"{obj.room.hostel.name} {obj.room.room_number}"
+
+    def get_reported_by_name(self, obj):
+        st = obj.reported_by_student
+        return f"{st.first_name} {st.last_name}" if st else None
+
+    def get_assigned_to_name(self, obj):
+        return str(obj.assigned_to) if obj.assigned_to else None
 
     def validate(self, attrs):
+        if self.instance is None:
+            attrs.setdefault("request_date", date.today())
         g = lambda k: attrs.get(k, getattr(self.instance, k, None) if self.instance else None)
         errors = {}
         if g("status") == "Completed" and not g("completion_date"):
@@ -245,12 +273,26 @@ class MaintenanceRequestSerializer(serializers.ModelSerializer):
 
 
 class VisitorSerializer(serializers.ModelSerializer):
+    student_name = serializers.SerializerMethodField()
+    room_label = serializers.SerializerMethodField()
+
     class Meta:
         model = Visitor
-        fields = ["visitor_id", "booking", "visitor_name", "phone", "visit_date",
-                  "check_in_time", "check_out_time", "purpose"]
+        fields = ["visitor_id", "booking", "student_name", "room_label", "visitor_name",
+                  "phone", "visit_date", "check_in_time", "check_out_time", "purpose"]
+        extra_kwargs = {"visit_date": {"required": False}}
+
+    def get_student_name(self, obj):
+        st = obj.booking.student
+        return f"{st.first_name} {st.last_name}"
+
+    def get_room_label(self, obj):
+        r = obj.booking.room
+        return f"{r.hostel.name} {r.room_number}"
 
     def validate(self, attrs):
+        if self.instance is None:
+            attrs.setdefault("visit_date", date.today())
         g = lambda k: attrs.get(k, getattr(self.instance, k, None) if self.instance else None)
         if g("booking") and g("booking").status != "Active":
             raise serializers.ValidationError(

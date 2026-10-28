@@ -141,7 +141,7 @@ class PaymentViewSet(BaseViewSet):
 
     resource = "payments"
     http_method_names = NO_DELETE
-    queryset = Payment.objects.order_by("-payment_id")
+    queryset = Payment.objects.select_related("booking__student", "booking__room__hostel").order_by("-payment_id")
     serializer_class = PaymentSerializer
     filter_params = {"status": "payment_status", "booking": "booking_id",
                      "method": "payment_method"}
@@ -150,7 +150,8 @@ class PaymentViewSet(BaseViewSet):
 
 class MaintenanceViewSet(BaseViewSet):
     resource = "maintenance"
-    queryset = MaintenanceRequest.objects.order_by("-request_id")
+    queryset = MaintenanceRequest.objects.select_related(
+        "room__hostel", "reported_by_student", "assigned_to").order_by("-request_id")
     serializer_class = MaintenanceRequestSerializer
     filter_params = {"status": "status", "priority": "priority", "room": "room_id"}
     search_fields = ("description",)
@@ -158,7 +159,7 @@ class MaintenanceViewSet(BaseViewSet):
 
 class VisitorViewSet(BaseViewSet):
     resource = "visitors"
-    queryset = Visitor.objects.order_by("-visitor_id")
+    queryset = Visitor.objects.select_related("booking__student", "booking__room__hostel").order_by("-visitor_id")
     serializer_class = VisitorSerializer
     filter_params = {"booking": "booking_id"}
     search_fields = ("visitor_name",)

@@ -23,3 +23,15 @@
 .drawer dd{margin:3px 0 0;font-size:13px;word-break:break-word}
 .panelhead .actions{display:flex;gap:8px}
 .notice button{border:0;background:transparent;color:#315eea;font-weight:600;cursor:pointer}
+
+/* --- forms and row actions --- */
+.formdrawer{display:flex;flex-direction:column;gap:12px}
+.field{display:grid;gap:5px;font-size:12px;color:#475467}
+.field input,.field select,.field textarea{padding:9px 10px;border:1px solid #d6dbe6;border-radius:8px;font:inherit;font-size:13px;color:#202a40;background:#fff}
+.formsubmit{padding:11px;border-radius:8px;font-size:13px;cursor:pointer;margin-top:4px}
+.rowactions{display:flex;gap:6px;align-items:center;justify-content:flex-end}
+.rowactions .iconbtn{margin-left:0}
+.linkbtn{border:1px solid #d6dbe6;background:#fff;border-radius:6px;padding:4px 8px;font-size:10px;font-weight:700;color:#315eea;cursor:pointer}
+.linkbtn.danger{color:#b42318;border-color:#fecdca}
+.notice.good{background:#e9f8f1;border-color:#c5ecda;color:#1f7a57}
+.panelhead .primary{box-shadow:none}

@@ -26,7 +26,13 @@ if not SECRET_KEY:
             "(for local development you may instead set DJANGO_DEBUG=True)."
         )
 
-ALLOWED_HOSTS = ["127.0.0.1", "localhost"]
+def _env_list(name, default):
+    raw = os.getenv(name, "")
+    return [x.strip() for x in raw.split(",") if x.strip()] or default
+
+
+# Comma-separated in .env for deployment, e.g. ALLOWED_HOSTS=hostel.example.com
+ALLOWED_HOSTS = _env_list("ALLOWED_HOSTS", ["127.0.0.1", "localhost"])
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -126,10 +132,11 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 
 # React (Vite) dev server is allowed to call the API
-CORS_ALLOWED_ORIGINS = [
+# Comma-separated in .env for deployment, e.g. CORS_ALLOWED_ORIGINS=https://hostel.example.com
+CORS_ALLOWED_ORIGINS = _env_list("CORS_ALLOWED_ORIGINS", [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
-]
+])
 # Vite moves to 5174, 5175... when 5173 is busy; that silently breaks the app
 # with a CORS error. In local development (DEBUG) allow any localhost port.
 if DEBUG:

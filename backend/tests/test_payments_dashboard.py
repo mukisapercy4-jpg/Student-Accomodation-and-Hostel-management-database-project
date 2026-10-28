@@ -156,3 +156,23 @@ class ValidatorTests(SAHMSTestCase):
 
     def test_list_is_paginated(self):
         self.assertIn("results", self.client.get("/api/students/").data)
+
+
+class ReadableNamesTests(SAHMSTestCase):
+    """Lists carry human-readable names so the UI never has to show raw IDs."""
+
+    def test_payment_maintenance_visitor_expose_names(self):
+        b = self.booking(self.s1)
+        self.payment(b, "1000.00", ref="N1")
+        p = self.client.get("/api/payments/").json()["results"][0]
+        self.assertIn(self.s1.first_name, p["student_name"])
+        self.assertIn(self.room.room_number, p["booking_label"])
+        r = self.client.post("/api/maintenance/", {
+            "room": self.room.pk, "reported_by_student": self.s1.pk,
+            "description": "Leaking tap", "priority": "Low", "status": "Pending"}, format="json")
+        self.assertEqual(r.status_code, 201)  # request_date defaults to today
+        self.assertIn(self.room.room_number, r.json()["room_label"])
+        v = self.client.post("/api/visitors/", {
+            "booking": b.pk, "visitor_name": "Dad", "check_in_time": "10:00:00"}, format="json")
+        self.assertEqual(v.status_code, 201)  # visit_date defaults to today
+        self.assertIn(self.s1.first_name, v.json()["student_name"])

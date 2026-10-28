@@ -51,3 +51,11 @@ if the live schema changes, paste a fresh export over the snapshot.
 * `testing.SQLiteOnlyTestRunner` switches the unmanaged models to managed **only inside the test process** and **refuses to run** if the database is not SQLite (so `manage.py test` can never create or touch a MySQL test database). Production settings and models are unchanged.
 * `tests/test_isolation.py` asserts the engine is in-memory SQLite. All data is created by the tests.
 * Limits: SQLite does not enforce the MySQL CHECK constraints (the API validators repeat them) and ignores row locks, so `test_bookings.LockingTests` only proves the locks are requested; real lock behaviour needs a MySQL concurrency check on a scratch database.
+
+## Update 28 Oct (final pass)
+* Removed the duplicate `SAHMS_Dashboard_Design/` folder (old mock dashboard with fixed demo numbers) at the owner's request.
+* Frontend write screens added (student, booking, cancel, payment + status change, maintenance, visitor), role-gated from `/api/auth/me/`.
+* Payments, maintenance and visitor lists now return readable names (`student_name`, `booking_label`, `room_label`, ...) instead of only IDs.
+* `request_date` (maintenance) and `visit_date` (visitors) default to today when omitted, like `payment_date`.
+* `ALLOWED_HOSTS` and `CORS_ALLOWED_ORIGINS` can be set from `.env`; local defaults are unchanged.
+* No new database tables were created. The only tables Django adds are its own login/framework tables via the documented migration; the 8 business tables remain untouched and protected by `SAHMS/db_router.py`.
