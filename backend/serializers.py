@@ -301,3 +301,34 @@ class VisitorSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {"check_out_time": "Check-out time cannot precede check-in time."})
         return attrs
+
+
+# Read-only serializers for application-owned audit/history records.
+from audittrail.models import AuditEvent, BookingStatusHistory, PaymentStatusHistory
+
+
+class AuditEventSerializer(serializers.ModelSerializer):
+    actor_username = serializers.CharField(source="actor.username", read_only=True, default=None)
+
+    class Meta:
+        model = AuditEvent
+        fields = ["id", "actor", "actor_username", "action", "resource", "entity_id",
+                  "changed_fields", "description", "timestamp", "request_id"]
+
+
+class BookingStatusHistorySerializer(serializers.ModelSerializer):
+    actor_username = serializers.CharField(source="actor.username", read_only=True, default=None)
+
+    class Meta:
+        model = BookingStatusHistory
+        fields = ["id", "booking_id", "old_status", "new_status", "actor",
+                  "actor_username", "reason", "timestamp"]
+
+
+class PaymentStatusHistorySerializer(serializers.ModelSerializer):
+    actor_username = serializers.CharField(source="actor.username", read_only=True, default=None)
+
+    class Meta:
+        model = PaymentStatusHistory
+        fields = ["id", "payment_id", "old_status", "new_status", "actor",
+                  "actor_username", "reason", "timestamp"]

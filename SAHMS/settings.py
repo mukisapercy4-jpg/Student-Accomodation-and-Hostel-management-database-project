@@ -44,6 +44,7 @@ INSTALLED_APPS = [
 
     # Existing SAHMS application
     "backend",
+    "audittrail",
 
     # REST API and CORS support
     "rest_framework",

@@ -12,6 +12,9 @@ router.register("bookings", views.BookingViewSet, basename="booking")
 router.register("payments", views.PaymentViewSet, basename="payment")
 router.register("maintenance", views.MaintenanceViewSet, basename="maintenance")
 router.register("visitors", views.VisitorViewSet, basename="visitor")
+router.register("audit-logs", views.AuditEventViewSet, basename="audit-event")
+router.register("booking-status-history", views.BookingStatusHistoryViewSet, basename="booking-status-history")
+router.register("payment-status-history", views.PaymentStatusHistoryViewSet, basename="payment-status-history")
 
 urlpatterns = [
     path("health/", views.HealthView.as_view(), name="health"),
