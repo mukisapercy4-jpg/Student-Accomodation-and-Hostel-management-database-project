@@ -1,27 +1,23 @@
-from django.urls import path
+from django.urls import include, path
+from rest_framework.routers import DefaultRouter
 
-from .views import (
-    StaffListCreateAPIView,
-    StudentListCreateAPIView,
-    HostelListCreateAPIView,
-    RoomListCreateAPIView,
-    BookingListCreateAPIView,
-    PaymentListCreateAPIView,
-    MaintenanceRequestListCreateAPIView,
-    VisitorListCreateAPIView,
-)
+from . import views
+
+router = DefaultRouter()
+router.register("staff", views.StaffViewSet, basename="staff")
+router.register("students", views.StudentViewSet, basename="student")
+router.register("hostels", views.HostelViewSet, basename="hostel")
+router.register("rooms", views.RoomViewSet, basename="room")
+router.register("bookings", views.BookingViewSet, basename="booking")
+router.register("payments", views.PaymentViewSet, basename="payment")
+router.register("maintenance", views.MaintenanceViewSet, basename="maintenance")
+router.register("visitors", views.VisitorViewSet, basename="visitor")
 
 urlpatterns = [
-    path("staff/", StaffListCreateAPIView.as_view(), name="staff-list"),
-    path("students/", StudentListCreateAPIView.as_view(), name="student-list"),
-    path("hostels/", HostelListCreateAPIView.as_view(), name="hostel-list"),
-    path("rooms/", RoomListCreateAPIView.as_view(), name="room-list"),
-    path("bookings/", BookingListCreateAPIView.as_view(), name="booking-list"),
-    path("payments/", PaymentListCreateAPIView.as_view(), name="payment-list"),
-    path(
-        "maintenance/",
-        MaintenanceRequestListCreateAPIView.as_view(),
-        name="maintenance-list",
-    ),
-    path("visitors/", VisitorListCreateAPIView.as_view(), name="visitor-list"),
+    path("health/", views.HealthView.as_view(), name="health"),
+    path("auth/login/", views.LoginView.as_view(), name="login"),
+    path("auth/logout/", views.LogoutView.as_view(), name="logout"),
+    path("auth/me/", views.MeView.as_view(), name="me"),
+    path("dashboard/", views.DashboardView.as_view(), name="dashboard"),
+    path("", include(router.urls)),
 ]

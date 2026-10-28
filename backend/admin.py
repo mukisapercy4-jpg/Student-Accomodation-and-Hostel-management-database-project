@@ -1,4 +1,18 @@
 from django.contrib import admin
+
+
+class ViewOnlyAdmin(admin.ModelAdmin):
+    """Business tables are changed only through the API, where the rules live."""
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
 from .models import (
     Staff,
     Student,
@@ -12,14 +26,14 @@ from .models import (
 
 
 @admin.register(Staff)
-class StaffAdmin(admin.ModelAdmin):
+class StaffAdmin(ViewOnlyAdmin):
     list_display = ("staff_id", "first_name", "last_name", "role", "phone", "email")
     search_fields = ("first_name", "last_name", "phone", "email")
     list_filter = ("role",)
 
 
 @admin.register(Student)
-class StudentAdmin(admin.ModelAdmin):
+class StudentAdmin(ViewOnlyAdmin):
     list_display = (
         "student_id",
         "reg_number",
@@ -34,14 +48,14 @@ class StudentAdmin(admin.ModelAdmin):
 
 
 @admin.register(Hostel)
-class HostelAdmin(admin.ModelAdmin):
+class HostelAdmin(ViewOnlyAdmin):
     list_display = ("hostel_id", "name", "address", "warden")
     search_fields = ("name", "address")
     list_select_related = ("warden",)
 
 
 @admin.register(Room)
-class RoomAdmin(admin.ModelAdmin):
+class RoomAdmin(ViewOnlyAdmin):
     list_display = ("room_id", "hostel", "room_number", "capacity", "price_per_semester")
     search_fields = ("room_number", "hostel__name")
     list_filter = ("hostel",)
@@ -49,7 +63,7 @@ class RoomAdmin(admin.ModelAdmin):
 
 
 @admin.register(Booking)
-class BookingAdmin(admin.ModelAdmin):
+class BookingAdmin(ViewOnlyAdmin):
     list_display = (
         "booking_id",
         "student",
@@ -70,7 +84,7 @@ class BookingAdmin(admin.ModelAdmin):
 
 
 @admin.register(Payment)
-class PaymentAdmin(admin.ModelAdmin):
+class PaymentAdmin(ViewOnlyAdmin):
     list_display = (
         "payment_id",
         "booking",
@@ -84,7 +98,7 @@ class PaymentAdmin(admin.ModelAdmin):
 
 
 @admin.register(MaintenanceRequest)
-class MaintenanceRequestAdmin(admin.ModelAdmin):
+class MaintenanceRequestAdmin(ViewOnlyAdmin):
     list_display = (
         "request_id",
         "room",
@@ -100,7 +114,7 @@ class MaintenanceRequestAdmin(admin.ModelAdmin):
 
 
 @admin.register(Visitor)
-class VisitorAdmin(admin.ModelAdmin):
+class VisitorAdmin(ViewOnlyAdmin):
     list_display = (
         "visitor_id",
         "visitor_name",

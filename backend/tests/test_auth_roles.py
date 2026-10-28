@@ -42,3 +42,19 @@ class AuthRoleTests(SAHMSTestCase):
         self.assertIn("national_id", self.client.get("/api/students/").data["results"][0])
         self.login(self.warden_u)
         self.assertNotIn("national_id", self.client.get("/api/students/").data["results"][0])
+
+
+class HealthTests(SAHMSTestCase):
+    def test_health_is_open_but_data_is_not(self):
+        c = APIClient()
+        self.assertEqual(c.get("/api/health/").status_code, 200)
+        self.assertEqual(c.get("/api/staff/").status_code, 401)
+  
+    def test_me_flags_superuser(self):
+        from django.contrib.auth.models import User
+        User.objects.create_superuser("root1", password="pw")
+        c = APIClient()
+        r = c.post("/api/auth/login/", {"username": "root1", "password": "pw"}, format="json")
+        self.assertTrue(r.data["is_superuser"])
+        c.credentials(HTTP_AUTHORIZATION="Token " + r.data["token"])
+        self.assertTrue(c.get("/api/auth/me/").data["is_superuser"])

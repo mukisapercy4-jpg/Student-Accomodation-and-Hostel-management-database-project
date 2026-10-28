@@ -1,1571 +1,352 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from 'react';
 import {
-  LayoutDashboard,
-  Users,
-  Building2,
-  BedDouble,
-  ClipboardList,
-  CreditCard,
-  Wrench,
-  UserRound,
-  Search,
-  Bell,
-  Plus,
-  ArrowUpRight,
-  MoreHorizontal,
-  Download,
-  RefreshCw,
-  Eye,
-  X,
-  AlertCircle,
-  Database,
-  LoaderCircle,
-  ChevronDown,
-  Menu,
-  MapPin,
-  CheckCircle2,
-  Clock3,
-} from "lucide-react";
+  LayoutDashboard, Users, Building2, BedDouble, ClipboardList, CreditCard, Wrench,
+  UserRound, Search, MapPin, LogOut, Clock3, CheckCircle2, Eye, X, Download, RefreshCw, Plus, Pencil,
+} from 'lucide-react';
+import './App.css';
+import { api, ApiError, fetchAll, money, toCsv, tokenStore } from './api.js';
+import { FORMS, RecordForm } from './forms.jsx';
 
-import "./App.css";
-
-const API = (
-  import.meta.env.VITE_API_BASE_URL ||
-  "http://127.0.0.1:8000/api"
-).replace(/\/$/, "");
-
-const NAVIGATION = [
-  { name: "Dashboard", icon: LayoutDashboard },
-  { name: "Students", icon: Users, endpoint: "students" },
-  { name: "Hostels", icon: Building2, endpoint: "hostels" },
-  { name: "Rooms", icon: BedDouble, endpoint: "rooms" },
-  { name: "Bookings", icon: ClipboardList, endpoint: "bookings" },
-  { name: "Payments", icon: CreditCard, endpoint: "payments" },
-  { name: "Maintenance", icon: Wrench, endpoint: "maintenance" },
-  { name: "Visitors", icon: UserRound, endpoint: "visitors" },
-  { name: "Staff", icon: Users, endpoint: "staff" },
+const NAV = [
+  ['Dashboard', LayoutDashboard, null],
+  ['Students', Users, 'students'],
+  ['Hostels', Building2, 'hostels'],
+  ['Rooms', BedDouble, 'rooms'],
+  ['Bookings', ClipboardList, 'bookings'],
+  ['Payments', CreditCard, 'payments'],
+  ['Maintenance', Wrench, 'maintenance'],
+  ['Visitors', UserRound, 'visitors'],
+  ['Staff', Users, 'staff'],
 ];
 
-const DASHBOARD_MODULES = [
-  "Students",
-  "Hostels",
-  "Rooms",
-  "Bookings",
-  "Payments",
-];
-
-const MODULE_FIELDS = {
-  Students: [
-    ["reg_number", "Registration number"],
-    ["first_name", "First name"],
-    ["last_name", "Last name"],
-    ["gender", "Gender"],
-    ["phone", "Phone"],
-    ["email", "Email"],
-    ["program", "Programme"],
-    ["year_of_study", "Year of study"],
-    ["national_id", "National ID"],
-  ],
-
-  Hostels: [
-    ["name", "Hostel name"],
-    ["gender_category", "Gender category"],
-    ["address", "Address"],
-    ["warden", "Warden"],
-  ],
-
-  Rooms: [
-    ["room_number", "Room number"],
-    ["hostel", "Hostel"],
-    ["capacity", "Capacity"],
-    ["room_type", "Room type"],
-    ["price_per_semester", "Price per semester"],
-  ],
-
-  Bookings: [
-    ["student", "Student"],
-    ["room", "Room"],
-    ["booking_date", "Booking date"],
-    ["academic_year", "Academic year"],
-    ["semester", "Semester"],
-    ["start_date", "Start date"],
-    ["end_date", "End date"],
-    ["status", "Status"],
-    ["agreed_price", "Agreed price"],
-  ],
-
-  Payments: [
-    ["booking", "Booking"],
-    ["amount", "Amount"],
-    ["payment_date", "Payment date"],
-    ["payment_method", "Payment method"],
-    ["reference_number", "Reference number"],
-    ["payment_status", "Payment status"],
-  ],
-
-  Maintenance: [
-    ["room", "Room"],
-    ["reported_by_student", "Reporting student"],
-    ["description", "Description"],
-    ["request_date", "Request date"],
-    ["priority", "Priority"],
-    ["status", "Status"],
-    ["assigned_to", "Assigned staff"],
-    ["completion_date", "Completion date"],
-  ],
-
-  Visitors: [
-    ["booking", "Booking"],
-    ["visitor_name", "Visitor name"],
-    ["phone", "Phone"],
-    ["visit_date", "Visit date"],
-    ["check_in_time", "Check-in time"],
-    ["check_out_time", "Check-out time"],
-    ["purpose", "Purpose"],
-  ],
-
-  Staff: [
-    ["first_name", "First name"],
-    ["last_name", "Last name"],
-    ["role", "Role"],
-    ["phone", "Phone"],
-    ["email", "Email"],
-    ["employment_date", "Employment date"],
-  ],
+const COLUMNS = {
+  students: [['reg_number', 'Reg no.'], ['first_name', 'First name'], ['last_name', 'Last name'], ['gender', 'Gender'], ['program', 'Programme'], ['year_of_study', 'Year']],
+  hostels: [['name', 'Hostel'], ['address', 'Address'], ['warden_name', 'Warden'], ['capacity', 'Capacity'], ['occupied_spaces', 'Occupied'], ['occupancy', 'Occupancy %']],
+  rooms: [['hostel_name', 'Hostel'], ['room_number', 'Room'], ['capacity', 'Capacity'], ['occupied_spaces', 'Occupied'], ['price_per_semester', 'Price / semester']],
+  bookings: [['student_reg_number', 'Reg no.'], ['student_name', 'Student'], ['hostel_name', 'Hostel'], ['room_number', 'Room'], ['start_date', 'Start'], ['end_date', 'End'], ['status', 'Status'], ['agreed_price', 'Agreed price']],
+  payments: [['payment_id', 'ID'], ['student_name', 'Student'], ['booking_label', 'Booking'], ['amount', 'Amount'], ['payment_date', 'Date'], ['payment_method', 'Method'], ['reference_number', 'Reference'], ['payment_status', 'Status']],
+  maintenance: [['request_id', 'ID'], ['room_label', 'Room'], ['reported_by_name', 'Reported by'], ['assigned_to_name', 'Assigned to'], ['description', 'Description'], ['priority', 'Priority'], ['status', 'Status'], ['request_date', 'Requested']],
+  staff: [['first_name', 'First name'], ['last_name', 'Last name'], ['role', 'Role'], ['phone', 'Phone'], ['email', 'Email'], ['employment_date', 'Employed']],
+  visitors: [['visitor_name', 'Visitor'], ['student_name', 'Visiting'], ['room_label', 'Room'], ['visit_date', 'Date'], ['check_in_time', 'In'], ['check_out_time', 'Out'], ['purpose', 'Purpose']],
 };
+const MONEY_FIELDS = new Set(['agreed_price', 'amount', 'price_per_semester']);
 
-function getRecordId(record) {
-  if (!record || typeof record !== "object") return "";
+function Login({ onLogin }) {
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
 
-  const preferredKeys = [
-    "student_id",
-    "hostel_id",
-    "room_id",
-    "booking_id",
-    "payment_id",
-    "maintenance_id",
-    "request_id",
-    "visitor_id",
-    "staff_id",
-    "id",
-  ];
-
-  const key = preferredKeys.find(
-    (name) => record[name] !== undefined && record[name] !== null
-  );
-
-  if (key) return record[key];
-
-  const fallback = Object.keys(record).find((name) =>
-    name.endsWith("_id")
-  );
-
-  return fallback ? record[fallback] : "";
-}
-
-function formatLabel(key) {
-  return key
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (letter) => letter.toUpperCase());
-}
-
-function formatValue(value) {
-  if (value === null || value === undefined || value === "") {
-    return "—";
-  }
-
-  if (typeof value === "boolean") {
-    return value ? "Yes" : "No";
-  }
-
-  if (Array.isArray(value)) {
-    return value.map(formatValue).join(", ");
-  }
-
-  if (typeof value === "object") {
-    if (value.name) return String(value.name);
-    if (value.id !== undefined) return String(value.id);
-
-    return JSON.stringify(value);
-  }
-
-  return String(value);
-}
-
-function formatMoney(value) {
-  if (value === null || value === undefined || value === "") {
-    return "—";
-  }
-
-  const amount = Number(value);
-
-  if (!Number.isFinite(amount)) {
-    return formatValue(value);
-  }
-
-  return `UGX ${amount.toLocaleString("en-UG", {
-    maximumFractionDigits: 2,
-  })}`;
-}
-
-function isMoneyField(key) {
-  return /^(amount|agreed_price|price_per_semester|balance|cost)$/i.test(
-    key
-  );
-}
-
-function getErrorMessage(error) {
-  if (error?.name === "AbortError") {
-    return "The request timed out. Check whether Django is running.";
-  }
-
-  if (error instanceof TypeError) {
-    return "Could not connect to Django. Check that the backend is running and the API URL is correct.";
-  }
-
-  return error instanceof Error
-    ? error.message
-    : "An unexpected error occurred.";
-}
-
-function StatusBadge({ value }) {
-  const status = String(value || "Unknown");
-
-  const className = status
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "");
+  const submit = async (e) => {
+    e.preventDefault();
+    setBusy(true); setError('');
+    try {
+      const data = await api('/auth/login/', { method: 'POST', body: JSON.stringify({ username, password }) });
+      tokenStore.set(data.token);
+      onLogin(data);
+    } catch (err) { setError(err.message); } finally { setBusy(false); }
+  };
 
   return (
-    <span className={`status status-${className}`}>
-      {status}
-    </span>
-  );
-}
-
-function Notice({ message, kind = "info", onDismiss }) {
-  if (!message) return null;
-
-  return (
-    <div className={`notice notice-${kind}`} role="status">
-      <span>{message}</span>
-
-      <button
-        type="button"
-        aria-label="Dismiss notification"
-        onClick={onDismiss}
-      >
-        <X size={16} />
-      </button>
+    <div className="loginwrap">
+      <form className="loginbox" onSubmit={submit}>
+        <h1>SAHMS</h1>
+        <p>Sign in to the hostel management system</p>
+        <input placeholder="Username" value={username} onChange={(e) => setUsername(e.target.value)} autoFocus />
+        <input placeholder="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+        {error && <div className="formerror">{error}</div>}
+        <button className="primary" disabled={busy || !username || !password}>{busy ? 'Signing in…' : 'Sign in'}</button>
+      </form>
     </div>
   );
 }
 
-function Stat({
-  icon: Icon,
-  title,
-  value,
-  note,
-  tone = "blue",
-  loading,
-}) {
+function Stat({ icon: Icon, title, value, note, tone }) {
   return (
     <article className="stat">
-      <div className="stathead">
-        <span className={`staticon ${tone}`}>
-          <Icon size={20} />
-        </span>
-
-        <MoreHorizontal size={19} className="muted-icon" />
-      </div>
-
+      <div className="stathead"><span className={`staticon ${tone}`}><Icon size={20} /></span></div>
       <p>{title}</p>
-
-      <div className="statvalue">
-        {loading ? (
-          <LoaderCircle className="spinning" size={20} />
-        ) : (
-          value
-        )}
-      </div>
-
+      <div className="statvalue">{value}</div>
       <small>{note}</small>
     </article>
   );
 }
 
-function ModulePage({
-  module,
-  records,
-  loading,
-  error,
-  search,
-  onSearch,
-  onRefresh,
-  onView,
-  onExport,
-}) {
-  const fields = MODULE_FIELDS[module] || [];
+const statusClass = (s) => ({ Active: 'confirmed', Completed: 'confirmed', Pending: 'pending', 'In Progress': 'pending', Cancelled: 'cancelled', Failed: 'cancelled', Refunded: 'cancelled' }[s] || 'pending');
 
-  const filteredRecords = useMemo(() => {
-    const query = search.trim().toLowerCase();
+function BookingStatus({ s }) {
+  return <span className={`status ${statusClass(s)}`}>{['Pending', 'In Progress'].includes(s) ? <Clock3 size={12} /> : <CheckCircle2 size={12} />} {s}</span>;
+}
 
-    if (!query) return records;
-
-    return records.filter((record) =>
-      Object.values(record).some((value) =>
-        formatValue(value).toLowerCase().includes(query)
-      )
-    );
-  }, [records, search]);
-
+function Dashboard({ data, can }) {
+  const { totals, occupancy, payments, bookings_by_status: byStatus, recent_bookings: recent } = data;
   return (
     <>
-      <div className="welcome">
-        <div>
-          <p className="eyebrow">
-            <Database size={13} /> LIVE DATABASE MODULE
-          </p>
-
-          <h1>{module}</h1>
-
-          <p className="sub">
-            Browse and search {module.toLowerCase()} records from
-            your Django API.
-          </p>
-        </div>
-
-        <div className="actions">
-          <button
-            className="secondary"
-            type="button"
-            onClick={onExport}
-            disabled={records.length === 0}
-          >
-            <Download size={15} />
-            Export CSV
-          </button>
-
-          <button
-            className="secondary"
-            type="button"
-            onClick={onRefresh}
-            disabled={loading}
-          >
-            <RefreshCw
-              size={15}
-              className={loading ? "spinning" : ""}
-            />
-            Refresh
-          </button>
-        </div>
-      </div>
-
-      <section className="panel module-panel">
-        <div className="panelhead">
-          <div>
-            <h2>{module} records</h2>
-
-            <p>
-              {filteredRecords.length} record
-              {filteredRecords.length === 1 ? "" : "s"}
-              {search.trim()
-                ? " matching your search"
-                : " available"}
-            </p>
-          </div>
-
-          <span className="connection-indicator">
-            <i />
-            Django API
-          </span>
-        </div>
-
-        <div className="module-toolbar">
-          <label className="module-search">
-            <Search size={17} />
-
-            <input
-              type="search"
-              placeholder={`Search ${module.toLowerCase()}...`}
-              value={search}
-              onChange={(event) => onSearch(event.target.value)}
-            />
-
-            {search && (
-              <button
-                type="button"
-                className="clear-search"
-                aria-label="Clear search"
-                onClick={() => onSearch("")}
-              >
-                <X size={15} />
-              </button>
-            )}
-          </label>
-
-          <button
-            className="secondary"
-            type="button"
-            onClick={onRefresh}
-            disabled={loading}
-          >
-            <RefreshCw size={15} />
-            Reload
-          </button>
-        </div>
-
-        {loading && (
-          <div className="module-message">
-            <LoaderCircle className="spinning" size={25} />
-            <p>Loading records from the database...</p>
-          </div>
-        )}
-
-        {!loading && error && (
-          <div className="module-message error-message">
-            <AlertCircle size={25} />
-
-            <div>
-              <b>Could not load {module.toLowerCase()}</b>
-              <p>{error}</p>
-
-              <button
-                type="button"
-                className="primary"
-                onClick={onRefresh}
-              >
-                <RefreshCw size={15} />
-                Try again
-              </button>
-            </div>
-          </div>
-        )}
-
-        {!loading && !error && records.length === 0 && (
-          <div className="module-message">
-            <Database size={25} />
-
-            <div>
-              <b>No records returned</b>
-              <p>
-                The API returned no {module.toLowerCase()} records.
-              </p>
-            </div>
-          </div>
-        )}
-
-        {!loading &&
-          !error &&
-          records.length > 0 &&
-          filteredRecords.length === 0 && (
-            <div className="module-message">
-              <Search size={25} />
-
-              <div>
-                <b>No matching records</b>
-                <p>Try another search term.</p>
+      <section className={`stats ${payments ? 'five' : ''}`}>
+        <Stat icon={Users} title="Total students" value={totals.students.toLocaleString()} note="Registered students" tone="blue" />
+        <Stat icon={Building2} title="Registered hostels" value={String(totals.hostels).padStart(2, '0')} note={`${totals.rooms} room(s)`} tone="purple" />
+        <Stat icon={BedDouble} title="Room occupancy" value={`${occupancy.rate_percent}%`} note={`${occupancy.occupied_spaces} of ${occupancy.capacity} spaces (Active bookings only)`} tone="green" />
+        {payments && <Stat icon={CreditCard} title="Outstanding Balance" value={money(payments.outstanding_balance)} note="Agreed price minus completed payments" tone="orange" />}
+        {payments && <Stat icon={Clock3} title="Pending payment records" value={money(payments.pending_records_total)} note={`${payments.pending_records_count} record(s) awaiting completion`} tone="blue" />}
+      </section>
+      {payments && payments.review.flagged_bookings_count > 0 && (
+        <section className="panel">
+          <div className="panelhead"><div><h2>Payments needing review</h2>
+            <p>{payments.review.flagged_bookings_count} booking(s) · overpaid in total {money(payments.review.overpaid_total)}. Payments are kept as recorded; resolve each with the existing Refunded status if needed.</p></div></div>
+          <div className="tablewrap"><table>
+            <thead><tr><th>STUDENT</th><th>HOSTEL / ROOM</th><th>AGREED</th><th>COMPLETED</th><th>OVERPAID BY</th><th>WHY</th></tr></thead>
+            <tbody>{payments.review.items.map((f) => (
+              <tr key={f.booking_id}>
+                <td><b>{f.student}</b><small>{f.student_reg_number}</small></td>
+                <td><b>{f.hostel}</b><small>{f.room}</small></td>
+                <td>{money(f.agreed_price)}</td><td>{money(f.completed_payments)}</td>
+                <td><b>{money(f.overpaid_by)}</b></td><td>{f.reasons.join('; ')}</td>
+              </tr>
+            ))}</tbody>
+          </table></div>
+        </section>
+      )}
+      <section className="middle">
+        <article className="panel">
+          <div className="panelhead"><div><h2>Occupancy by hostel</h2><p>Active bookings against room capacity</p></div></div>
+          {occupancy.by_hostel.length === 0 && <p className="empty">No hostels yet.</p>}
+          <div className="chart"><div className="plot"><div className="bars">
+            {occupancy.by_hostel.map((h) => (
+              <div className="bar" key={h.hostel_id}>
+                <div className="bartrack"><span style={{ height: `${Math.min(h.occupancy, 100)}%` }}><b>{h.occupancy}%</b></span></div>
+                <small>{h.name}</small>
               </div>
-            </div>
-          )}
-
-        {!loading &&
-          !error &&
-          filteredRecords.length > 0 && (
-            <div className="tablewrap">
-              <table className="module-table">
-                <thead>
-                  <tr>
-                    <th>ID</th>
-
-                    {fields.map(([key, label]) => (
-                      <th key={key}>{label}</th>
-                    ))}
-
-                    <th>Details</th>
-                  </tr>
-                </thead>
-
-                <tbody>
-                  {filteredRecords.map((record, index) => (
-                    <tr
-                      key={
-                        getRecordId(record) ||
-                        `${module}-${index}`
-                      }
-                    >
-                      <td>{getRecordId(record) || "—"}</td>
-
-                      {fields.map(([key]) => {
-                        const value = record[key];
-
-                        const statusField = [
-                          "status",
-                          "payment_status",
-                          "priority",
-                        ].includes(key);
-
-                        return (
-                          <td key={key}>
-                            {statusField ? (
-                              <StatusBadge value={value} />
-                            ) : isMoneyField(key) ? (
-                              formatMoney(value)
-                            ) : (
-                              formatValue(value)
-                            )}
-                          </td>
-                        );
-                      })}
-
-                      <td>
-                        <button
-                          type="button"
-                          className="icon-button"
-                          aria-label={`View ${module} details`}
-                          title="View record details"
-                          onClick={() => onView(record)}
-                        >
-                          <Eye size={17} />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-        <div className="tablefoot">
-          <span>
-            Showing <b>{filteredRecords.length}</b> of{" "}
-            <b>{records.length}</b> records
-          </span>
-
-          <span className="read-only-note">
-            <Database size={13} />
-            Read-only view
-          </span>
+            ))}
+          </div></div></div>
+          {occupancy.overbooked_rooms > 0 && <div className="chartfoot">⚠ {occupancy.overbooked_rooms} room(s) hold more Active bookings than their capacity.</div>}
+        </article>
+        <article className="panel">
+          <div className="panelhead"><div><h2>Bookings by status</h2><p>All bookings on record</p></div></div>
+          <div className="activity">
+            {Object.entries(byStatus).map(([s, n]) => (
+              <div className="activityrow" key={s}><div><b>{s}</b><p>{n} booking(s)</p></div></div>
+            ))}
+            <div className="activityrow"><div><b>Open maintenance</b><p>{data.open_maintenance} request(s)</p></div></div>
+          </div>
+        </article>
+      </section>
+      <section className="panel hostels">
+        <div className="panelhead"><div><h2>Hostels</h2><p>Occupancy and capacity at a glance</p></div></div>
+        <div className="hostelgrid">
+          {occupancy.by_hostel.map((h, i) => (
+            <article className="hostelcard" key={h.hostel_id}>
+              <div className={`building ill${i % 3}`}><span>HOSTEL {String(i + 1).padStart(2, '0')}</span></div>
+              <div className="hostelinfo">
+                <div className="hosteltitle"><h3>{h.name}</h3></div>
+                <p className="location"><MapPin size={13} />{h.address || 'No address recorded'}</p>
+                <div className="metrics">
+                  <div><small>Occupancy</small><b>{h.occupancy}%</b></div>
+                  <div><small>Warden</small><b>{h.warden_name}</b></div>
+                </div>
+                <div className="progress"><i style={{ width: `${Math.min(h.occupancy, 100)}%` }} /></div>
+              </div>
+            </article>
+          ))}
         </div>
       </section>
+      {can('bookings') && (
+        <section className="panel bookings">
+          <div className="panelhead"><div><h2>Recent bookings</h2><p>Latest five</p></div></div>
+          <div className="tablewrap"><table>
+            <thead><tr><th>STUDENT</th><th>HOSTEL / ROOM</th><th>START</th><th>AMOUNT</th><th>STATUS</th></tr></thead>
+            <tbody>
+              {recent.map((b) => (
+                <tr key={b.booking_id}>
+                  <td><b>{b.student_name}</b><small>{b.student_reg_number}</small></td>
+                  <td><b>{b.hostel_name}</b><small>{b.room_number}</small></td>
+                  <td>{b.start_date}</td><td><b>{money(b.agreed_price)}</b></td>
+                  <td><BookingStatus s={b.status} /></td>
+                </tr>
+              ))}
+              {recent.length === 0 && <tr><td colSpan="5" className="empty">No bookings yet.</td></tr>}
+            </tbody>
+          </table></div>
+        </section>
+      )}
     </>
   );
 }
 
-function RecordDetails({ record, module, onClose }) {
+const label = (k) => k.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase());
+const show = (k, v) => (v === null || v === undefined || v === '' ? '—' : MONEY_FIELDS.has(k) ? money(v) : typeof v === 'object' ? JSON.stringify(v) : String(v));
+
+function Details({ record, onClose }) {
   useEffect(() => {
-    function handleKeyDown(event) {
-      if (event.key === "Escape") onClose();
-    }
-
-    window.addEventListener("keydown", handleKeyDown);
-
-    return () =>
-      window.removeEventListener("keydown", handleKeyDown);
+    const onKey = (e) => e.key === 'Escape' && onClose();
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
-
-  if (!record) return null;
-
   return (
-    <div
-      className="details-overlay"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onClose();
-      }}
-    >
-      <section
-        className="details-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="details-title"
-      >
-        <div className="details-header">
-          <div>
-            <p className="eyebrow">RECORD DETAILS</p>
-
-            <h2 id="details-title">{module}</h2>
-
-            <small>
-              Record ID: {getRecordId(record) || "Not available"}
-            </small>
-          </div>
-
-          <button
-            type="button"
-            className="icon-button"
-            aria-label="Close details"
-            onClick={onClose}
-          >
-            <X size={20} />
-          </button>
-        </div>
-
-        <div className="details-grid">
-          {Object.entries(record).map(([key, value]) => (
-            <div className="details-field" key={key}>
-              <small>{formatLabel(key)}</small>
-
-              <b>
-                {isMoneyField(key)
-                  ? formatMoney(value)
-                  : formatValue(value)}
-              </b>
-            </div>
-          ))}
-        </div>
-
-        <div className="details-footer">
-          <span className="read-only-note">
-            <Database size={13} />
-            Viewing only — no changes made
-          </span>
-
-          <button
-            type="button"
-            className="primary"
-            onClick={onClose}
-          >
-            Close
-          </button>
-        </div>
-      </section>
+    <div className="overlay" onClick={onClose}>
+      <aside className="drawer" onClick={(e) => e.stopPropagation()} role="dialog" aria-label="Record details">
+        <div className="drawerhead"><h2>Record details</h2><button className="iconbtn" onClick={onClose} title="Close"><X size={18} /></button></div>
+        <dl>{Object.entries(record).map(([k, v]) => (
+          <div key={k}><dt>{label(k)}</dt><dd>{show(k, v)}</dd></div>
+        ))}</dl>
+      </aside>
     </div>
   );
 }
 
-function Dashboard({
-  records,
-  loadingByModule,
-  errorsByModule,
-  apiStatus,
-  onNavigate,
-  onRefresh,
-  onNotice,
-}) {
-  const students = records.Students;
-  const hostels = records.Hostels;
-  const rooms = records.Rooms;
-  const bookings = records.Bookings;
-  const payments = records.Payments;
+function ModuleTable({ resource, q, name, me }) {
+  const [state, setState] = useState({ loading: true, rows: [], count: 0, error: '' });
+  const [page, setPage] = useState(1);
+  const [selected, setSelected] = useState(null);
+  const [exporting, setExporting] = useState(false);
+  const [tick, setTick] = useState(0);
+  const [form, setForm] = useState(null); // {record?}
+  const [flash, setFlash] = useState('');
+  const perms = me.permissions[resource] || [];
+  const canCreate = perms.includes('create') && !!FORMS[resource];
+  const canUpdate = perms.includes('update');
+  const isAdmin = me.roles.includes('Admin');
+  const pageSize = state.rows.length && state.count > state.rows.length ? state.pageSize : 25;
 
-  const totalCapacity = rooms.reduce(
-    (total, room) => total + (Number(room.capacity) || 0),
-    0
-  );
+  useEffect(() => { setPage(1); }, [q, resource]);
 
-  const pendingPayments = payments.filter((payment) =>
-    /pending|unpaid|outstanding/i.test(
-      String(payment.payment_status || "")
-    )
-  );
+  useEffect(() => {
+    let live = true;
+    setState((s) => ({ ...s, loading: true, error: '' }));
+    const params = new URLSearchParams({ page: String(page) });
+    if (q) params.set('search', q);
+    api(`/${resource}/?${params}`)
+      .then((d) => live && setState({ loading: false, rows: d.results, count: d.count, pageSize: d.results.length > 0 && d.next ? d.results.length : 25, error: '' }))
+      .catch((e) => live && setState({ loading: false, rows: [], count: 0, error: e.message }));
+    return () => { live = false; };
+  }, [resource, page, q, tick]);
 
-  const pendingAmount = pendingPayments.reduce(
-    (total, payment) => total + (Number(payment.amount) || 0),
-    0
-  );
+  const exportCsv = async () => {
+    setExporting(true);
+    try {
+      const rows = await fetchAll(resource, q);
+      const url = URL.createObjectURL(new Blob([toCsv(rows)], { type: 'text/csv;charset=utf-8' }));
+      const a = document.createElement('a');
+      a.href = url; a.download = `sahms-${resource}-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click(); URL.revokeObjectURL(url);
+    } catch (e) { setState((s) => ({ ...s, error: e.message })); } finally { setExporting(false); }
+  };
 
-  const failedModules = DASHBOARD_MODULES.filter(
-    (name) => errorsByModule[name]
-  );
+  const act = async (path, body, okMsg) => {
+    try { await api(path, { method: 'POST', body: body ? JSON.stringify(body) : undefined }); setFlash(okMsg); setTick((t) => t + 1); }
+    catch (e) { setState((s) => ({ ...s, error: e.message })); }
+  };
+  const patchStatus = async (id, status) => {
+    try { await api(`/${resource}/${id}/`, { method: 'PATCH', body: JSON.stringify({ payment_status: status }) }); setFlash(`Payment marked ${status}.`); setTick((t) => t + 1); }
+    catch (e) { setState((s) => ({ ...s, error: e.message })); }
+  };
+  const rowActions = (r) => {
+    if (!canUpdate) return null;
+    if (resource === 'bookings' && ['Pending', 'Active'].includes(r.status)) {
+      return <button className="linkbtn danger" onClick={() => window.confirm(`Cancel booking #${r.booking_id} for ${r.student_name}?`) && act(`/bookings/${r.booking_id}/cancel/`, null, 'Booking cancelled.')}>Cancel</button>;
+    }
+    if (resource === 'payments') {
+      const next = { Pending: ['Completed', 'Failed'], Completed: ['Refunded'] }[r.payment_status] || [];
+      return next.map((n) => <button key={n} className="linkbtn" onClick={() => window.confirm(`Mark payment ${r.payment_id} as ${n}?`) && patchStatus(r.payment_id, n)}>{n}</button>);
+    }
+    if (['students', 'maintenance', 'visitors'].includes(resource)) {
+      return <button className="iconbtn" title="Edit" onClick={() => setForm({ record: r })}><Pencil size={15} /></button>;
+    }
+    return null;
+  };
 
-  const dashboardLoading = DASHBOARD_MODULES.some(
-    (name) => loadingByModule[name]
-  );
-
+  const cols = COLUMNS[resource];
   return (
-    <>
-      <div className="welcome">
-        <div>
-          <p className="eyebrow">MANAGEMENT OVERVIEW</p>
-
-          <h1>Good day, Admin</h1>
-
-          <p className="sub">
-            An overview of the records currently available in SAHMS.
-          </p>
-        </div>
-
+    <section className="panel bookings">
+      <div className="panelhead"><div><h2>{name}</h2><p>{state.loading ? 'Loading…' : `${state.count} record(s)${q ? ` matching “${q}”` : ''}`}</p></div>
         <div className="actions">
-          <button
-            className="secondary"
-            type="button"
-            onClick={() =>
-              onNotice(
-                "Open a data module and select Export CSV to download its loaded records."
-              )
-            }
-          >
-            <Download size={15} />
-            Export data
-          </button>
-
-          <button
-            className="primary"
-            type="button"
-            onClick={() =>
-              onNotice(
-                "Record creation remains disabled until the backend validation rules and database constraints have been verified."
-              )
-            }
-          >
-            <Plus size={16} />
-            Create new
-          </button>
+          {canCreate && <button className="primary" onClick={() => setForm({})}><Plus size={14} /> New {FORMS[resource].noun}</button>}
+          <button className="secondary" onClick={() => setTick((t) => t + 1)}><RefreshCw size={14} /> Refresh</button>
+          <button className="secondary" onClick={exportCsv} disabled={exporting || state.count === 0}><Download size={14} /> {exporting ? 'Exporting…' : 'Export CSV'}</button>
+        </div></div>
+      {flash && <div className="notice good">{flash}<button onClick={() => setFlash('')}>×</button></div>}
+      {state.error && (
+        <div className="notice">Could not load {name.toLowerCase()}: {state.error}
+          <button onClick={() => setTick((t) => t + 1)}>Retry</button></div>
+      )}
+      <div className="tablewrap"><table>
+        <thead><tr>{cols.map(([, l]) => <th key={l}>{l.toUpperCase()}</th>)}<th /></tr></thead>
+        <tbody>
+          {state.rows.map((r, i) => (
+            <tr key={i}>{cols.map(([k]) => (
+              <td key={k}>{k.endsWith('status') || k === 'status' ? <BookingStatus s={r[k]} /> : show(k, r[k])}</td>
+            ))}<td className="rowactions">{rowActions(r)}<button className="iconbtn" title="View details" onClick={() => setSelected(r)}><Eye size={16} /></button></td></tr>
+          ))}
+          {!state.loading && !state.error && state.rows.length === 0 && <tr><td colSpan={cols.length + 1} className="empty">No records.</td></tr>}
+        </tbody>
+      </table></div>
+      <div className="tablefoot">{state.count} record(s)
+        <div>
+          <button disabled={page === 1} onClick={() => setPage(page - 1)}>Previous</button>
+          <button className="current">{page}</button>
+          <button disabled={page * pageSize >= state.count} onClick={() => setPage(page + 1)}>Next</button>
         </div>
       </div>
-
-      {failedModules.length > 0 && (
-        <div className="notice notice-warning">
-          <AlertCircle size={17} />
-
-          <span>
-            Data could not be loaded for: {failedModules.join(", ")}.
-            Retry the affected modules or check Django.
-          </span>
-        </div>
-      )}
-
-      <section className="stats">
-        <Stat
-          icon={Users}
-          title="Registered students"
-          value={students.length.toLocaleString("en-UG")}
-          note={
-            errorsByModule.Students
-              ? "Request failed — count unavailable"
-              : "Records returned by Django"
-          }
-          tone="blue"
-          loading={loadingByModule.Students}
-        />
-
-        <Stat
-          icon={Building2}
-          title="Registered hostels"
-          value={hostels.length.toLocaleString("en-UG")}
-          note={
-            errorsByModule.Hostels
-              ? "Request failed — count unavailable"
-              : "Hostel records from the API"
-          }
-          tone="purple"
-          loading={loadingByModule.Hostels}
-        />
-
-        <Stat
-          icon={BedDouble}
-          title="Registered rooms"
-          value={rooms.length.toLocaleString("en-UG")}
-          note={
-            errorsByModule.Rooms
-              ? "Request failed — count unavailable"
-              : `${totalCapacity} bed spaces by room capacity`
-          }
-          tone="green"
-          loading={loadingByModule.Rooms}
-        />
-
-        <Stat
-          icon={CreditCard}
-          title="Pending payment amounts"
-          value={
-            errorsByModule.Payments
-              ? "Unavailable"
-              : formatMoney(pendingAmount)
-          }
-          note="Sum of amounts marked pending/unpaid"
-          tone="orange"
-          loading={loadingByModule.Payments}
-        />
-      </section>
-
-      <section className="middle">
-        <article className="panel">
-          <div className="panelhead">
-            <div>
-              <h2>Hostel overview</h2>
-              <p>Registered hostels and their locations</p>
-            </div>
-
-            <button
-              className="filter"
-              type="button"
-              onClick={() => onNavigate("Hostels")}
-            >
-              View hostels <ArrowUpRight size={14} />
-            </button>
-          </div>
-
-          {loadingByModule.Hostels ? (
-            <div className="module-message compact">
-              <LoaderCircle className="spinning" size={20} />
-              Loading hostels...
-            </div>
-          ) : errorsByModule.Hostels ? (
-            <div className="module-message compact error-message">
-              <AlertCircle size={20} />
-              <p>{errorsByModule.Hostels}</p>
-            </div>
-          ) : hostels.length === 0 ? (
-            <div className="module-message compact">
-              No hostel records are currently available.
-            </div>
-          ) : (
-            <div className="dashboard-list">
-              {hostels.slice(0, 5).map((hostel) => (
-                <button
-                  type="button"
-                  className="dashboard-list-row"
-                  key={getRecordId(hostel) || hostel.name}
-                  onClick={() => onNavigate("Hostels")}
-                >
-                  <span className="dashboard-list-icon">
-                    <Building2 size={19} />
-                  </span>
-
-                  <span className="list-copy">
-                    <b>{hostel.name || "Unnamed hostel"}</b>
-                    <small>
-                      {hostel.address || "Address not provided"}
-                    </small>
-                  </span>
-
-                  <ArrowUpRight size={17} />
-                </button>
-              ))}
-            </div>
-          )}
-
-          <button
-            className="allactivity"
-            type="button"
-            onClick={() => onNavigate("Hostels")}
-          >
-            View all hostels ↗
-          </button>
-        </article>
-
-        <article className="panel">
-          <div className="panelhead">
-            <div>
-              <h2>Database connection</h2>
-              <p>Current API status</p>
-            </div>
-
-            <Database size={19} />
-          </div>
-
-          <div className="connection-summary">
-            <span
-              className={`connection-dot ${apiStatus}`}
-            />
-
-            <div>
-              <b>
-                {apiStatus === "connected"
-                  ? "API responding"
-                  : apiStatus === "checking"
-                    ? "Checking API..."
-                    : "API connection issue"}
-              </b>
-
-              <p>
-                {apiStatus === "connected"
-                  ? "Dashboard requests completed successfully."
-                  : "Check the Django server and API URL if requests fail."}
-              </p>
-            </div>
-          </div>
-
-          <div className="dashboard-summary-row">
-            <span>Booking records</span>
-            <b>
-              {errorsByModule.Bookings
-                ? "Unavailable"
-                : bookings.length}
-            </b>
-          </div>
-
-          <div className="dashboard-summary-row">
-            <span>Room records</span>
-            <b>
-              {errorsByModule.Rooms ? "Unavailable" : rooms.length}
-            </b>
-          </div>
-
-          <div className="dashboard-summary-row">
-            <span>Payment records</span>
-            <b>
-              {errorsByModule.Payments
-                ? "Unavailable"
-                : payments.length}
-            </b>
-          </div>
-
-          <button
-            className="allactivity"
-            type="button"
-            onClick={onRefresh}
-            disabled={dashboardLoading}
-          >
-            <RefreshCw
-              size={14}
-              className={dashboardLoading ? "spinning" : ""}
-            />
-            Refresh dashboard data
-          </button>
-        </article>
-      </section>
-
-      <section className="panel hostels">
-        <div className="panelhead">
-          <div>
-            <h2>Hostel directory</h2>
-            <p>Hostels returned by the database API</p>
-          </div>
-
-          <button
-            className="textbutton"
-            type="button"
-            onClick={() => onNavigate("Hostels")}
-          >
-            View all hostels ↗
-          </button>
-        </div>
-
-        {loadingByModule.Hostels ? (
-          <div className="module-message compact">
-            <LoaderCircle className="spinning" size={20} />
-            Loading directory...
-          </div>
-        ) : errorsByModule.Hostels ? (
-          <div className="module-message compact error-message">
-            <AlertCircle size={20} />
-            <p>{errorsByModule.Hostels}</p>
-          </div>
-        ) : hostels.length === 0 ? (
-          <div className="module-message compact">
-            No hostels to display.
-          </div>
-        ) : (
-          <div className="hostelgrid">
-            {hostels.slice(0, 3).map((hostel, index) => (
-              <article
-                className="hostelcard"
-                key={getRecordId(hostel) || hostel.name}
-              >
-                <div className={`building ill${index % 3}`}>
-                  <span>
-                    HOSTEL {String(index + 1).padStart(2, "0")}
-                  </span>
-
-                  <div className="buildingart">
-                    {Array.from({ length: 9 }, (_, item) => (
-                      <i key={item} />
-                    ))}
-                  </div>
-
-                  <MoreHorizontal />
-                </div>
-
-                <div className="hostelinfo">
-                  <div className="hosteltitle">
-                    <h3>{hostel.name || "Unnamed hostel"}</h3>
-
-                    <span>
-                      <CheckCircle2 size={12} />
-                      Registered
-                    </span>
-                  </div>
-
-                  <p className="location">
-                    <MapPin size={13} />
-                    {hostel.address || "Address not provided"}
-                  </p>
-
-                  <div className="metrics">
-                    <div>
-                      <small>Hostel ID</small>
-                      <b>{getRecordId(hostel) || "—"}</b>
-                    </div>
-
-                    <div>
-                      <small>Warden</small>
-                      <b>{formatValue(hostel.warden)}</b>
-                    </div>
-                  </div>
-
-                  <button
-                    className="detail"
-                    type="button"
-                    onClick={() => onNavigate("Hostels")}
-                  >
-                    View hostel records <ArrowUpRight size={14} />
-                  </button>
-                </div>
-              </article>
-            ))}
-          </div>
-        )}
-      </section>
-
-      <section className="panel bookings">
-        <div className="panelhead">
-          <div>
-            <h2>Recent bookings</h2>
-            <p>
-              Booking records returned by Django. API ordering may vary.
-            </p>
-          </div>
-
-          <button
-            className="filter"
-            type="button"
-            onClick={() => onNavigate("Bookings")}
-          >
-            View bookings
-          </button>
-        </div>
-
-        {loadingByModule.Bookings ? (
-          <div className="module-message compact">
-            <LoaderCircle className="spinning" size={20} />
-            Loading bookings...
-          </div>
-        ) : errorsByModule.Bookings ? (
-          <div className="module-message compact error-message">
-            <AlertCircle size={20} />
-            <p>{errorsByModule.Bookings}</p>
-          </div>
-        ) : bookings.length === 0 ? (
-          <div className="module-message compact">
-            <ClipboardList size={24} />
-            <p>No booking records are available to display.</p>
-          </div>
-        ) : (
-          <div className="tablewrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>BOOKING ID</th>
-                  <th>STUDENT ID</th>
-                  <th>ROOM ID</th>
-                  <th>BOOKING DATE</th>
-                  <th>AGREED PRICE</th>
-                  <th>STATUS</th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {bookings.slice(0, 5).map((booking, index) => (
-                  <tr
-                    key={
-                      getRecordId(booking) ||
-                      `booking-${index}`
-                    }
-                  >
-                    <td>{getRecordId(booking) || "—"}</td>
-                    <td>{formatValue(booking.student)}</td>
-                    <td>{formatValue(booking.room)}</td>
-                    <td>{formatValue(booking.booking_date)}</td>
-                    <td>{formatMoney(booking.agreed_price)}</td>
-                    <td>
-                      <StatusBadge value={booking.status} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        <div className="tablefoot">
-          <span>
-            Displaying <b>{Math.min(bookings.length, 5)}</b> of{" "}
-            <b>{bookings.length}</b> loaded bookings
-          </span>
-
-          <button
-            className="textbutton"
-            type="button"
-            onClick={() => onNavigate("Bookings")}
-          >
-            Open bookings ↗
-          </button>
-        </div>
-      </section>
-
-      <footer>
-        © {new Date().getFullYear()} SAHMS · Student Accommodation
-        &amp; Hostel Management System
-        <span>Built for better campus living ♥</span>
-      </footer>
-    </>
+      {form && <RecordForm resource={resource} record={form.record} isAdmin={isAdmin} onClose={() => setForm(null)} onSaved={(m) => { setForm(null); setFlash(m); setTick((t) => t + 1); }} />}
+      {selected && <Details record={selected} onClose={() => setSelected(null)} />}
+    </section>
   );
 }
 
 export default function App() {
-  const [active, setActive] = useState("Dashboard");
-  const [search, setSearch] = useState("");
-  const [notice, setNotice] = useState("");
-  const [noticeKind, setNoticeKind] = useState("info");
-  const [recordsByModule, setRecordsByModule] = useState({});
-  const [loadingByModule, setLoadingByModule] = useState({});
-  const [errorsByModule, setErrorsByModule] = useState({});
-  const [selectedRecord, setSelectedRecord] = useState(null);
-  const [lastUpdated, setLastUpdated] = useState(null);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [me, setMe] = useState(null);
+  const [checking, setChecking] = useState(!!tokenStore.get());
+  const [active, setActive] = useState('Dashboard');
+  const [q, setQ] = useState('');
+  const [dash, setDash] = useState({ loading: false, data: null, error: '' });
 
-  const activeNavigation = NAVIGATION.find(
-    (item) => item.name === active
-  );
-
-  const activeEndpoint = activeNavigation?.endpoint;
-
-  const notify = useCallback((message, kind = "info") => {
-    setNotice(message);
-    setNoticeKind(kind);
-  }, []);
-
-  const loadModule = useCallback(async (moduleName) => {
-    const navigationItem = NAVIGATION.find(
-      (item) => item.name === moduleName
-    );
-
-    if (!navigationItem?.endpoint) return;
-
-    setLoadingByModule((previous) => ({
-      ...previous,
-      [moduleName]: true,
-    }));
-
-    setErrorsByModule((previous) => ({
-      ...previous,
-      [moduleName]: "",
-    }));
-
-    const controller = new AbortController();
-    const timeout = window.setTimeout(
-      () => controller.abort(),
-      20000
-    );
-
-    try {
-      const response = await fetch(
-        `${API}/${navigationItem.endpoint}/`,
-        {
-          method: "GET",
-          headers: { Accept: "application/json" },
-          signal: controller.signal,
-        }
-      );
-
-      if (!response.ok) {
-        let message = `Request failed with HTTP ${response.status}`;
-
-        try {
-          const body = await response.json();
-          message = body.detail || body.error || message;
-        } catch {
-          // Retain the HTTP status message.
-        }
-
-        throw new Error(message);
-      }
-
-      const data = await response.json();
-
-      const rows = Array.isArray(data)
-        ? data
-        : Array.isArray(data.results)
-          ? data.results
-          : null;
-
-      if (!rows) {
-        throw new Error(
-          "The API response was not a list of records."
-        );
-      }
-
-      setRecordsByModule((previous) => ({
-        ...previous,
-        [moduleName]: rows,
-      }));
-
-      setLastUpdated(new Date());
-    } catch (error) {
-      setErrorsByModule((previous) => ({
-        ...previous,
-        [moduleName]: getErrorMessage(error),
-      }));
-    } finally {
-      window.clearTimeout(timeout);
-
-      setLoadingByModule((previous) => ({
-        ...previous,
-        [moduleName]: false,
-      }));
-    }
-  }, []);
-
-  const refreshDashboard = useCallback(async () => {
-    await Promise.all(DASHBOARD_MODULES.map(loadModule));
-  }, [loadModule]);
+  const logout = useCallback(() => { tokenStore.clear(); setMe(null); setDash({ loading: false, data: null, error: '' }); }, []);
 
   useEffect(() => {
-    refreshDashboard();
-  }, [refreshDashboard]);
+    if (!tokenStore.get()) return;
+    api('/auth/me/').then(setMe).catch(() => tokenStore.clear()).finally(() => setChecking(false));
+  }, []);
 
   useEffect(() => {
-    if (activeEndpoint) loadModule(active);
-  }, [active, activeEndpoint, loadModule]);
+    if (!me || active !== 'Dashboard') return;
+    setDash((d) => ({ ...d, loading: true, error: '' }));
+    api('/dashboard/')
+      .then((data) => setDash({ loading: false, data, error: '' }))
+      .catch((e) => { if (e instanceof ApiError && e.status === 401) logout(); else setDash({ loading: false, data: null, error: e.message }); });
+  }, [me, active, logout]);
 
-  const records = {
-    Students: recordsByModule.Students || [],
-    Hostels: recordsByModule.Hostels || [],
-    Rooms: recordsByModule.Rooms || [],
-    Bookings: recordsByModule.Bookings || [],
-    Payments: recordsByModule.Payments || [],
-    Maintenance: recordsByModule.Maintenance || [],
-    Visitors: recordsByModule.Visitors || [],
-    Staff: recordsByModule.Staff || [],
-  };
+  if (checking) return <div className="loginwrap"><p>Loading…</p></div>;
+  if (!me) return <Login onLogin={setMe} />;
 
-  const dashboardLoading = DASHBOARD_MODULES.some(
-    (name) => loadingByModule[name]
-  );
-
-  const dashboardErrors = DASHBOARD_MODULES.some(
-    (name) => errorsByModule[name]
-  );
-
-  const dashboardAllLoaded = DASHBOARD_MODULES.every(
-    (name) =>
-      Object.prototype.hasOwnProperty.call(
-        recordsByModule,
-        name
-      ) && !errorsByModule[name]
-  );
-
-  const apiStatus =
-    dashboardLoading && !dashboardAllLoaded
-      ? "checking"
-      : dashboardAllLoaded && !dashboardErrors
-        ? "connected"
-        : "disconnected";
-
-  function navigateTo(moduleName) {
-    setActive(moduleName);
-    setSearch("");
-    setNotice("");
-    setSelectedRecord(null);
-    setMobileMenuOpen(false);
-  }
-
-  function handleGlobalSearch(value) {
-    setSearch(value);
-
-    if (active === "Dashboard" && value.trim()) {
-      setActive("Students");
-    }
-  }
-
-  function exportRecords(moduleName = active) {
-    const rows = recordsByModule[moduleName] || [];
-
-    if (!rows.length) {
-      notify(
-        `There are no loaded ${moduleName.toLowerCase()} records to export.`,
-        "warning"
-      );
-      return;
-    }
-
-    const headers = [
-      ...new Set(rows.flatMap((row) => Object.keys(row))),
-    ];
-
-    function csvCell(value) {
-      const text =
-        value !== null && typeof value === "object"
-          ? JSON.stringify(value)
-          : formatValue(value);
-
-      return `"${String(text).replace(/"/g, '""')}"`;
-    }
-
-    const csv = [
-      headers.map(csvCell).join(","),
-      ...rows.map((row) =>
-        headers.map((key) => csvCell(row[key])).join(",")
-      ),
-    ].join("\r\n");
-
-    const blob = new Blob(["\uFEFF", csv], {
-      type: "text/csv;charset=utf-8;",
-    });
-
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-
-    anchor.href = url;
-    anchor.download = `${moduleName.toLowerCase()}-export-${new Date()
-      .toISOString()
-      .slice(0, 10)}.csv`;
-
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
-
-    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-
-    notify(`${moduleName} CSV export prepared.`, "success");
-  }
+  const can = (res) => (me.permissions[res] || []).includes('read');
+  const nav = NAV.filter(([, , res]) => res === null || can(res));
+  const resource = NAV.find(([n]) => n === active)?.[2];
 
   return (
     <div className="layout">
-      {mobileMenuOpen && (
-        <button
-          type="button"
-          className="sidebar-backdrop"
-          aria-label="Close navigation"
-          onClick={() => setMobileMenuOpen(false)}
-        />
-      )}
-
-      <aside
-        className={`sidebar ${
-          mobileMenuOpen ? "sidebar-open" : ""
-        }`}
-      >
-        <div className="brand">
-          <span>
-            <Building2 size={23} />
-          </span>
-
-          <div>
-            <b>SAHMS</b>
-            <small>HOSTEL MANAGEMENT</small>
-          </div>
-        </div>
-
+      <aside className="sidebar">
+        <div className="brand"><span><Building2 size={23} /></span><div><b>SAHMS</b><small>HOSTEL MANAGEMENT</small></div></div>
         <p className="label">WORKSPACE</p>
-
-        <nav aria-label="Main navigation">
-          {NAVIGATION.map(({ name, icon: Icon }) => (
-            <button
-              type="button"
-              key={name}
-              className={active === name ? "selected" : ""}
-              aria-current={active === name ? "page" : undefined}
-              onClick={() => navigateTo(name)}
-            >
-              <Icon size={18} />
-
-              {name}
-
-              {name === "Maintenance" &&
-                records.Maintenance.length > 0 && (
-                  <i>{records.Maintenance.length}</i>
-                )}
-            </button>
-          ))}
-        </nav>
-
+        <nav>{nav.map(([name, Icon]) => (
+          <button key={name} className={active === name ? 'selected' : ''} onClick={() => { setActive(name); setQ(''); }}><Icon size={18} />{name}</button>
+        ))}</nav>
         <div className="sidebarfoot">
-          <div className="help">
-            <b>Need help?</b>
-
-            <p>
-              Contact your system administrator for assistance.
-            </p>
-
-            <button
-              type="button"
-              onClick={() =>
-                notify(
-                  "Please contact your system administrator for support."
-                )
-              }
-            >
-              Open help centre ↗
-            </button>
-          </div>
-
-          <div className="admin">
-            <span>AD</span>
-
-            <div>
-              <b>System Admin</b>
-              <small>Administrator</small>
-            </div>
-
-            <MoreHorizontal size={18} />
-          </div>
+          <div className="admin"><span>{me.username.slice(0, 2).toUpperCase()}</span><div><b>{me.username}</b><small>{me.is_superuser ? 'Superuser' : (me.roles.join(', ') || 'No role')}</small></div>
+            <button className="iconbtn" title="Sign out" onClick={() => api('/auth/logout/', { method: 'POST' }).finally(logout)}><LogOut size={16} /></button></div>
         </div>
       </aside>
-
       <main>
         <header>
-          <div className="header-left">
-            <button
-              type="button"
-              className="mobile-menu"
-              aria-label={
-                mobileMenuOpen
-                  ? "Close navigation"
-                  : "Open navigation"
-              }
-              onClick={() =>
-                setMobileMenuOpen((previous) => !previous)
-              }
-            >
-              {mobileMenuOpen ? (
-                <X size={20} />
-              ) : (
-                <Menu size={20} />
-              )}
-            </button>
-
-            <div className="crumb">
-              Workspace <span>/</span> <b>{active}</b>
-            </div>
-          </div>
-
-          <div className="headright">
-            <label className="global-search">
-              <Search size={16} />
-
-              <input
-                aria-label={`Search ${active}`}
-                placeholder={`Search ${
-                  active === "Dashboard"
-                    ? "students"
-                    : active.toLowerCase()
-                }...`}
-                value={search}
-                onChange={(event) =>
-                  handleGlobalSearch(event.target.value)
-                }
-              />
-
-              {search && (
-                <button
-                  type="button"
-                  aria-label="Clear search"
-                  onClick={() => setSearch("")}
-                >
-                  <X size={14} />
-                </button>
-              )}
-            </label>
-
-            <button
-              type="button"
-              className="bell"
-              aria-label="API status notification"
-              onClick={() =>
-                notify(
-                  dashboardErrors
-                    ? "At least one dashboard API request failed. Open the affected module and retry."
-                    : dashboardAllLoaded
-                      ? "Dashboard data has been retrieved from Django."
-                      : "Dashboard requests are still loading."
-                )
-              }
-            >
-              <Bell size={19} />
-              {dashboardErrors && <i />}
-            </button>
-
-            <div className="user">
-              <span>AD</span>
-
-              <div>
-                <b>Admin</b>
-                <small>Administrator</small>
-              </div>
-
-              <ChevronDown size={15} />
-            </div>
-          </div>
+          <div className="crumb">Workspace <span>/</span> <b>{active}</b></div>
+          <div className="headright">{resource && <label><Search size={16} /><input placeholder={`Search ${active.toLowerCase()}…`} value={q} onChange={(e) => setQ(e.target.value)} /></label>}</div>
         </header>
-
         <div className="content">
-          <Notice
-            message={notice}
-            kind={noticeKind}
-            onDismiss={() => setNotice("")}
-          />
-
-          {active === "Dashboard" ? (
-            <>
-              <Dashboard
-                records={records}
-                loadingByModule={loadingByModule}
-                errorsByModule={errorsByModule}
-                apiStatus={apiStatus}
-                onNavigate={navigateTo}
-                onRefresh={refreshDashboard}
-                onNotice={notify}
-              />
-
-              <div className="dashboard-refresh-note">
-                {lastUpdated && (
-                  <span>
-                    <Clock3 size={13} />
-                    Last successful response:{" "}
-                    {lastUpdated.toLocaleTimeString()}
-                  </span>
-                )}
-
-                <button
-                  type="button"
-                  className="textbutton"
-                  onClick={refreshDashboard}
-                  disabled={dashboardLoading}
-                >
-                  <RefreshCw
-                    size={13}
-                    className={
-                      dashboardLoading ? "spinning" : ""
-                    }
-                  />
-                  Refresh dashboard
-                </button>
-              </div>
-            </>
-          ) : (
-            <>
-              <ModulePage
-                module={active}
-                records={records[active] || []}
-                loading={!!loadingByModule[active]}
-                error={errorsByModule[active] || ""}
-                search={search}
-                onSearch={setSearch}
-                onRefresh={() => loadModule(active)}
-                onView={setSelectedRecord}
-                onExport={() => exportRecords(active)}
-              />
-
-              <footer>
-                © {new Date().getFullYear()} SAHMS · Student
-                Accommodation &amp; Hostel Management System
-                <span>Built for better campus living ♥</span>
-              </footer>
-            </>
-          )}
+          <div className="welcome"><div><p className="eyebrow">● MANAGEMENT OVERVIEW</p><h1>{active}</h1></div></div>
+          {active === 'Dashboard' && dash.loading && !dash.data && <p>Loading dashboard…</p>}
+          {active === 'Dashboard' && dash.error && <div className="notice">Could not load the dashboard: {dash.error}</div>}
+          {active === 'Dashboard' && dash.data && <Dashboard data={dash.data} can={can} />}
+          {resource && <ModuleTable key={resource} resource={resource} q={q} name={active} me={me} />}
         </div>
       </main>
-
-      {selectedRecord && (
-        <RecordDetails
-          record={selectedRecord}
-          module={active}
-          onClose={() => setSelectedRecord(null)}
-        />
-      )}
     </div>
   );
 }

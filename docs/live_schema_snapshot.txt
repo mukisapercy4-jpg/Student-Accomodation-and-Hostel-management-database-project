@@ -1,0 +1,144 @@
+# SHOW CREATE output pasted by the project owner on 2026-10-27 (schema only, no row data).
+# Used by backend/tests/test_schema_matches_mysql.py. Replace it with a fresh export if the live schema changes.
+
+-- staff
+CREATE TABLE staff (
+  staff_id int NOT NULL AUTO_INCREMENT,
+  first_name varchar(50) NOT NULL,
+  last_name varchar(50) NOT NULL,
+  phone varchar(20) DEFAULT NULL,
+  email varchar(100) DEFAULT NULL,
+  role varchar(30) NOT NULL,
+  employment_date date DEFAULT NULL,
+  PRIMARY KEY (staff_id),
+  UNIQUE KEY email (email)
+) ENGINE=InnoDB AUTO_INCREMENT=8 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- student
+CREATE TABLE student (
+  student_id int NOT NULL AUTO_INCREMENT,
+  reg_number varchar(50) NOT NULL,
+  first_name varchar(50) NOT NULL,
+  last_name varchar(50) NOT NULL,
+  gender varchar(10) DEFAULT NULL,
+  phone varchar(20) DEFAULT NULL,
+  email varchar(100) DEFAULT NULL,
+  program varchar(100) NOT NULL,
+  year_of_study int DEFAULT NULL,
+  national_id varchar(50) DEFAULT NULL,
+  PRIMARY KEY (student_id),
+  UNIQUE KEY reg_number (reg_number),
+  UNIQUE KEY email (email),
+  UNIQUE KEY national_id (national_id),
+  KEY idx_student_last_name (last_name)
+) ENGINE=InnoDB AUTO_INCREMENT=8 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- hostel
+CREATE TABLE hostel (
+  hostel_id int NOT NULL AUTO_INCREMENT,
+  name varchar(100) NOT NULL,
+  address varchar(255) DEFAULT NULL,
+  warden_id int NOT NULL,
+  PRIMARY KEY (hostel_id),
+  UNIQUE KEY name (name),
+  UNIQUE KEY warden_id (warden_id),
+  CONSTRAINT hostel_ibfk_1 FOREIGN KEY (warden_id) REFERENCES staff (staff_id)
+) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- room
+CREATE TABLE room (
+  room_id int NOT NULL AUTO_INCREMENT,
+  hostel_id int NOT NULL,
+  room_number varchar(20) NOT NULL,
+  capacity int NOT NULL,
+  price_per_semester decimal(10,2) NOT NULL,
+  PRIMARY KEY (room_id),
+  UNIQUE KEY uq_hostel_room (hostel_id,room_number),
+  CONSTRAINT fk_room_hostel FOREIGN KEY (hostel_id) REFERENCES hostel (hostel_id),
+  CONSTRAINT room_chk_1 CHECK ((capacity > 0)),
+  CONSTRAINT room_chk_2 CHECK ((price_per_semester >= 0))
+) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- booking
+CREATE TABLE booking (
+  booking_id int NOT NULL AUTO_INCREMENT,
+  student_id int NOT NULL,
+  room_id int NOT NULL,
+  booking_date date NOT NULL,
+  academic_year varchar(20) NOT NULL,
+  semester int NOT NULL,
+  start_date date NOT NULL,
+  end_date date NOT NULL,
+  status varchar(20) NOT NULL DEFAULT 'Pending',
+  agreed_price decimal(10,2) NOT NULL,
+  PRIMARY KEY (booking_id),
+  KEY fk_booking_student (student_id),
+  KEY fk_booking_room (room_id),
+  CONSTRAINT fk_booking_room FOREIGN KEY (room_id) REFERENCES room (room_id),
+  CONSTRAINT fk_booking_student FOREIGN KEY (student_id) REFERENCES student (student_id),
+  CONSTRAINT booking_chk_1 CHECK ((semester in (1,2))),
+  CONSTRAINT booking_chk_2 CHECK ((agreed_price >= 0)),
+  CONSTRAINT chk_booking_dates CHECK ((end_date >= start_date)),
+  CONSTRAINT chk_booking_status CHECK ((status in (_utf8mb4'Pending',_utf8mb4'Active',_utf8mb4'Completed',_utf8mb4'Cancelled')))
+) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- payment
+CREATE TABLE payment (
+  payment_id int NOT NULL AUTO_INCREMENT,
+  booking_id int NOT NULL,
+  amount decimal(10,2) NOT NULL,
+  payment_date date NOT NULL,
+  payment_method varchar(30) NOT NULL,
+  reference_number varchar(100) DEFAULT NULL,
+  payment_status varchar(20) NOT NULL DEFAULT 'Pending',
+  PRIMARY KEY (payment_id),
+  UNIQUE KEY reference_number (reference_number),
+  KEY fk_payment_booking (booking_id),
+  CONSTRAINT fk_payment_booking FOREIGN KEY (booking_id) REFERENCES booking (booking_id),
+  CONSTRAINT chk_payment_method CHECK ((payment_method in (_utf8mb4'Mobile Money',_utf8mb4'Bank',_utf8mb4'Cash'))),
+  CONSTRAINT chk_payment_status CHECK ((payment_status in (_utf8mb4'Pending',_utf8mb4'Completed',_utf8mb4'Failed',_utf8mb4'Refunded'))),
+  CONSTRAINT payment_chk_1 CHECK ((amount > 0))
+) ENGINE=InnoDB AUTO_INCREMENT=8 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- maintenance_request
+CREATE TABLE maintenance_request (
+  request_id int NOT NULL AUTO_INCREMENT,
+  room_id int NOT NULL,
+  reported_by_student int NOT NULL,
+  description text NOT NULL,
+  request_date date NOT NULL,
+  priority varchar(20) NOT NULL DEFAULT 'Medium',
+  status varchar(20) NOT NULL DEFAULT 'Pending',
+  assigned_to int DEFAULT NULL,
+  completion_date date DEFAULT NULL,
+  PRIMARY KEY (request_id),
+  KEY fk_maintenance_room (room_id),
+  KEY fk_maintenance_student (reported_by_student),
+  KEY fk_maintenance_staff (assigned_to),
+  CONSTRAINT fk_maintenance_room FOREIGN KEY (room_id) REFERENCES room (room_id),
+  CONSTRAINT fk_maintenance_staff FOREIGN KEY (assigned_to) REFERENCES staff (staff_id),
+  CONSTRAINT fk_maintenance_student FOREIGN KEY (reported_by_student) REFERENCES student (student_id),
+  CONSTRAINT chk_maintenance_completion_date CHECK (((completion_date is null) or (completion_date >= request_date))),
+  CONSTRAINT chk_maintenance_priority CHECK ((priority in (_utf8mb4'Low',_utf8mb4'Medium',_utf8mb4'High',_utf8mb4'Urgent'))),
+  CONSTRAINT chk_maintenance_status CHECK ((status in (_utf8mb4'Pending',_utf8mb4'In Progress',_utf8mb4'Completed',_utf8mb4'Cancelled')))
+) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- visitor
+CREATE TABLE visitor (
+  visitor_id int NOT NULL AUTO_INCREMENT,
+  booking_id int NOT NULL,
+  visitor_name varchar(100) NOT NULL,
+  phone varchar(20) DEFAULT NULL,
+  visit_date date NOT NULL,
+  check_in_time time NOT NULL,
+  check_out_time time DEFAULT NULL,
+  purpose varchar(100) DEFAULT NULL,
+  PRIMARY KEY (visitor_id),
+  KEY fk_visitor_booking (booking_id),
+  CONSTRAINT fk_visitor_booking FOREIGN KEY (booking_id) REFERENCES booking (booking_id),
+  CONSTRAINT chk_visitor_times CHECK (((check_out_time is null) or (check_out_time >= check_in_time)))
+) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- room_occupancy_view
+CREATE ALGORITHM=UNDEFINED DEFINER=root@localhost SQL SECURITY DEFINER VIEW room_occupancy_view AS select h.name AS hostel_name,r.room_number AS room_number,r.capacity AS capacity,count((case when (b.status = 'Active') then b.booking_id end)) AS occupied_spaces,(r.capacity - count((case when (b.status = 'Active') then b.booking_id end))) AS available_spaces from ((room r join hostel h on((r.hostel_id = h.hostel_id))) left join booking b on((r.room_id = b.room_id))) group by h.hostel_id,h.name,r.room_id,r.room_number,r.capacity;
+

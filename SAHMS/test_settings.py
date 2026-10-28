@@ -3,7 +3,7 @@ import os
 
 # Must be set before importing the real settings (which require a key).
 os.environ.setdefault("DJANGO_SECRET_KEY", "test-only-secret-key")
-os.environ["MALE_ONLY_HOSTELS"] = ""
+os.environ["MALE_ONLY_ENFORCED"] = "True"
 
 from .settings import *  # noqa: E402,F401,F403
 
@@ -13,6 +13,9 @@ DATABASES = {
         "NAME": ":memory:",
     }
 }
+
+# The guard router must not block creating the backend tables in throw-away SQLite.
+DATABASE_ROUTERS = []
 
 # Let Django create the (normally unmanaged) backend tables in SQLite.
 MIGRATION_MODULES = {"backend": None}
