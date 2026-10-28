@@ -49,3 +49,35 @@ SQLite. Check them on a scratch MySQL database before relying on them. Rules and
 
 ## Team
 - Mukisa (add teammates here)
+
+
+## Audit, status history, and database design additions
+
+The `audittrail` app adds three application-owned tables through migration
+`audittrail.0001_initial`: `audittrail_auditevent`,
+`audittrail_bookingstatushistory`, and `audittrail_paymentstatushistory`.
+These are separate from the eight existing business tables. The migration has
+not been applied to any database by this code package.
+
+New admin-readable, paginated, read-only endpoints:
+
+- `GET /api/audit-logs/`
+- `GET /api/booking-status-history/`
+- `GET /api/payment-status-history/`
+
+Each supports query filtering by its relevant action/resource/entity/status fields.
+Only Admin-role users (and superusers) can read these endpoints. New status
+transitions made through the API are recorded; historical transitions that
+occurred before deployment are not fabricated. An empty `old_status` on the
+first status-history row means the record was created in that status.
+
+Audit events record action, resource, entity ID, changed field names, actor,
+timestamp, and optional request ID. They deliberately do not store before/after
+field values, and known sensitive field names such as national ID, phone,
+email, payment amount, and payment reference are excluded.
+
+Before deployment, review `docs/MYSQL_LEAST_PRIVILEGE.md`,
+`docs/INDEX_REVIEW.md`, and `docs/OUTSTANDING_BALANCE_VIEW.sql`. The latter is
+design documentation only and has not been executed. Do not run migrations or
+SQL against the production MySQL database until the migration and deployment
+plan have been separately reviewed and approved.

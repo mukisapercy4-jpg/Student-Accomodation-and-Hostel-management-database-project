@@ -24,6 +24,9 @@ MATRIX = {
     "maintenance": {ADMIN: ALL, WARDEN: {R, C, U}, CARETAKER: {R, C, U}, READ_ONLY: {R}},
     "visitors":    {ADMIN: ALL, WARDEN: {R, C, U}, CARETAKER: {R, C, U}, READ_ONLY: {R}},
     "dashboard":   {ADMIN: {R}, WARDEN: {R}, CARETAKER: {R}, READ_ONLY: {R}},
+    "audit_logs":  {ADMIN: {R}},
+    "booking_history": {ADMIN: {R}},
+    "payment_history": {ADMIN: {R}},
 }
 
 

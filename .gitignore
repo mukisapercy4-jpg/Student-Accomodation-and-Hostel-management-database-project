@@ -76,6 +76,8 @@ Desktop.ini
 # Database backups and exports
 
 *.sql
+!docs/*.sql
+!sql/*.sql
 *.sql.gz
 *.dump
 *.bak

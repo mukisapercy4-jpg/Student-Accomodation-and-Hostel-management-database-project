@@ -12,6 +12,7 @@ from rest_framework.throttling import AnonRateThrottle
 from rest_framework.views import APIView
 
 from . import services
+from audittrail.models import AuditEvent, BookingStatusHistory, PaymentStatusHistory
 from .models import (
     Booking, Hostel, MaintenanceRequest, Payment, Room, Staff, Student, Visitor,
 )
@@ -19,7 +20,8 @@ from .roles import MATRIX, user_roles
 from .serializers import (
     BookingSerializer, HostelSerializer, MaintenanceRequestSerializer,
     PaymentSerializer, RoomSerializer, StaffSerializer, StudentSerializer,
-    VisitorSerializer,
+    VisitorSerializer, AuditEventSerializer, BookingStatusHistorySerializer,
+    PaymentStatusHistorySerializer,
 )
 
 NO_DELETE = ["get", "post", "put", "patch", "head", "options"]
@@ -47,6 +49,57 @@ class BaseViewSet(viewsets.ModelViewSet):
             qs = qs.filter(q)
         return qs
 
+    def _audit(self, action, obj, changed_fields=(), description=""):
+        # Never persist field values: names only, avoiding passwords, IDs, phones,
+        # national IDs, payment details, and other personal/financial information.
+        request = getattr(self, "request", None)
+        actor = getattr(request, "user", None)
+        if not getattr(actor, "is_authenticated", False):
+            actor = None
+        meta = getattr(request, "META", {}) if request else {}
+        sensitive_names = {"national_id", "phone", "email", "reference_number",
+                           "amount", "password", "token", "secret"}
+        safe_fields = sorted({str(name) for name in changed_fields
+                              if str(name).casefold() not in sensitive_names})
+        AuditEvent.objects.create(
+            actor=actor, action=action, resource=self.resource or "unknown",
+            entity_id=str(getattr(obj, "pk", "")),
+            changed_fields=safe_fields,
+            description=description[:255],
+            request_id=str(meta.get("HTTP_X_REQUEST_ID", ""))[:64],
+        )
+
+    def perform_create(self, serializer):
+        obj = serializer.save()
+        self._audit("create", obj, serializer.validated_data.keys(), "Record created")
+        if isinstance(obj, Booking):
+            BookingStatusHistory.objects.create(
+                booking_id=obj.pk, old_status="", new_status=obj.status,
+                actor=self.request.user if self.request.user.is_authenticated else None,
+                reason=str(self.request.data.get("reason", ""))[:255])
+        elif isinstance(obj, Payment):
+            PaymentStatusHistory.objects.create(
+                payment_id=obj.pk, old_status="", new_status=obj.payment_status,
+                actor=self.request.user if self.request.user.is_authenticated else None,
+                reason=str(self.request.data.get("reason", ""))[:255])
+
+    def perform_update(self, serializer):
+        old = serializer.instance
+        old_status = getattr(old, "status", getattr(old, "payment_status", None))
+        old_values = {f.name: getattr(old, f.name, None) for f in old._meta.concrete_fields}
+        obj = serializer.save()
+        changed = [name for name, value in old_values.items()
+                   if getattr(obj, name, None) != value]
+        self._audit("update", obj, changed, "Record updated")
+        actor = self.request.user if self.request.user.is_authenticated else None
+        reason = str(self.request.data.get("reason", ""))[:255]
+        if isinstance(obj, Booking) and old_status != obj.status:
+            BookingStatusHistory.objects.create(booking_id=obj.pk, old_status=old_status or "",
+                new_status=obj.status, actor=actor, reason=reason)
+        elif isinstance(obj, Payment) and old_status != obj.payment_status:
+            PaymentStatusHistory.objects.create(payment_id=obj.pk, old_status=old_status or "",
+                new_status=obj.payment_status, actor=actor, reason=reason)
+
     def destroy(self, request, *args, **kwargs):
         obj = self.get_object()
         for make_qs, label in self.dependents:
@@ -56,6 +109,10 @@ class BaseViewSet(viewsets.ModelViewSet):
                     {"detail": f"Cannot delete: {n} {label} still reference this record."},
                     status=status.HTTP_409_CONFLICT)
         return super().destroy(request, *args, **kwargs)
+
+    def perform_destroy(self, instance):
+        self._audit("delete", instance, (), "Record deleted")
+        return super().perform_destroy(instance)
 
 
 class StaffViewSet(BaseViewSet):
@@ -129,7 +186,17 @@ class BookingViewSet(BaseViewSet):
 
     @action(detail=True, methods=["post"])
     def cancel(self, request, pk=None):
-        booking, completed = services.cancel_booking(self.get_object())
+        original = self.get_object()
+        old_status = original.status
+        booking, completed = services.cancel_booking(original)
+        if old_status != booking.status:
+            actor = request.user if request.user.is_authenticated else None
+            BookingStatusHistory.objects.create(
+                booking_id=booking.pk, old_status=old_status, new_status=booking.status,
+                actor=actor, reason=str(request.data.get("reason", ""))[:255])
+            AuditEvent.objects.create(actor=actor, action="update", resource="bookings",
+                entity_id=str(booking.pk), changed_fields=["status"],
+                description="Booking cancelled", request_id=str(request.META.get("HTTP_X_REQUEST_ID", ""))[:64])
         data = self.get_serializer(booking).data
         data["completed_payments_total"] = str(completed)
         data["refund_review_required"] = completed > 0
@@ -163,6 +230,47 @@ class VisitorViewSet(BaseViewSet):
     serializer_class = VisitorSerializer
     filter_params = {"booking": "booking_id"}
     search_fields = ("visitor_name",)
+
+
+class AuditEventViewSet(viewsets.ReadOnlyModelViewSet):
+    resource = "audit_logs"
+    queryset = AuditEvent.objects.select_related("actor").all()
+    serializer_class = AuditEventSerializer
+    search_fields = ("entity_id", "description", "request_id")
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        for key in ("action", "resource", "actor_id"):
+            value = self.request.query_params.get(key)
+            if value not in (None, ""):
+                qs = qs.filter(**{key: value})
+        return qs
+
+
+class BookingStatusHistoryViewSet(viewsets.ReadOnlyModelViewSet):
+    resource = "booking_history"
+    queryset = BookingStatusHistory.objects.select_related("actor").all()
+    serializer_class = BookingStatusHistorySerializer
+    def get_queryset(self):
+        qs = super().get_queryset()
+        for key in ("booking_id", "old_status", "new_status"):
+            value = self.request.query_params.get(key)
+            if value not in (None, ""):
+                qs = qs.filter(**{key: value})
+        return qs
+
+
+class PaymentStatusHistoryViewSet(viewsets.ReadOnlyModelViewSet):
+    resource = "payment_history"
+    queryset = PaymentStatusHistory.objects.select_related("actor").all()
+    serializer_class = PaymentStatusHistorySerializer
+    def get_queryset(self):
+        qs = super().get_queryset()
+        for key in ("payment_id", "old_status", "new_status"):
+            value = self.request.query_params.get(key)
+            if value not in (None, ""):
+                qs = qs.filter(**{key: value})
+        return qs
 
 
 class HealthView(APIView):
