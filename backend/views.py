@@ -211,7 +211,8 @@ def _user_payload(user):
     roles = sorted(user_roles(user))
     if user.is_superuser:
         roles = list(ROLES)
-    return {"username": user.get_username(), "roles": roles,
+        return {"username": user.get_username(), "roles": roles,
+            "is_superuser": user.is_superuser,
             "permissions": {res: sorted(a for a in ("read", "create", "update", "delete")
                                         if _can(user, res, a))
                             for res in MATRIX}}

@@ -330,7 +330,7 @@ export default function App() {
           <button key={name} className={active === name ? 'selected' : ''} onClick={() => { setActive(name); setQ(''); }}><Icon size={18} />{name}</button>
         ))}</nav>
         <div className="sidebarfoot">
-          <div className="admin"><span>{me.username.slice(0, 2).toUpperCase()}</span><div><b>{me.username}</b><small>{me.roles.join(', ') || 'No role'}</small></div>
+          <div className="admin"><span>{me.username.slice(0, 2).toUpperCase()}</span><div><b>{me.username}</b><small>{me.is_superuser ? 'Superuser' : (me.roles.join(', ') || 'No role')}</small></div>
             <button className="iconbtn" title="Sign out" onClick={() => api('/auth/logout/', { method: 'POST' }).finally(logout)}><LogOut size={16} /></button></div>
         </div>
       </aside>
