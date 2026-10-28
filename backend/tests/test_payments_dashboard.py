@@ -1,5 +1,7 @@
 from django.db import connection
 
+from backend.models import Payment
+
 from .base import SAHMSTestCase
 
 
@@ -8,26 +10,36 @@ class PaymentRuleTests(SAHMSTestCase):
         body = {"booking": b.pk, "amount": amount, "payment_method": "Cash", **kw}
         return self.client.post("/api/payments/", body, format="json")
 
-    def test_completed_payments_can_exceed_price_and_are_preserved(self):
-        b = self.booking(self.s1, price="500000.00")
+    def test_overpayment_is_kept_unchanged_and_flagged(self):
+        b = self.booking(self.s1)  # agreed 500000
         self.assertEqual(self.pay(b, "300000.00", payment_status="Completed").status_code, 201)
-        self.assertEqual(self.pay(b, "300000.00", payment_status="Completed").status_code, 201)
-        self.assertEqual(self.pay(b, "200000.00", payment_status="Completed").status_code, 201)
-        dashboard = self.client.get("/api/dashboard/").data
-        self.assertEqual(dashboard["payments"]["outstanding_balance"], "0.00")
-        self.assertEqual(dashboard["payments"]["overpayment_total"], "300000.00")
-        self.assertEqual(dashboard["payments"]["overpaid_bookings_count"], 1)
+        r = self.pay(b, "300000.00", payment_status="Completed")
+        self.assertEqual(r.status_code, 201)
+        self.assertEqual(r.data["amount"], "300000.00")          # not truncated
+        self.assertEqual(r.data["booking_overpaid_by"], "100000.00")
+        self.assertEqual(Payment.objects.filter(booking=b).count(), 2)
+        d = self.client.get("/api/dashboard/").data["payments"]
+        self.assertEqual(d["outstanding_balance"], "0.00")
+        self.assertEqual(d["review"]["flagged_bookings_count"], 1)
+        self.assertEqual(d["review"]["overpaid_total"], "100000.00")
+        self.assertIn("Overpayment", d["review"]["items"][0]["reasons"][0])
+        row = self.client.get(f"/api/bookings/{b.pk}/").data
+        self.assertEqual(row["overpaid_by"], "100000.00")
 
-    def test_pending_does_not_count_until_completed(self):
+    def test_overpayment_resolved_through_existing_refund_status(self):
+        b = self.booking(self.s1)
+        self.payment(b, "500000.00")
+        extra = self.payment(b, "50000.00", ref="X")
+        self.client.patch(f"/api/payments/{extra.pk}/", {"payment_status": "Refunded"}, format="json")
+        self.assertEqual(self.client.get("/api/dashboard/").data["payments"]["review"]["flagged_bookings_count"], 0)
+
+    def test_pending_completed_later_even_if_it_exceeds_price(self):
         b = self.booking(self.s1)
         p1 = self.pay(b, "500000.00").data
         p2 = self.pay(b, "500000.00").data
-        url = "/api/payments/%s/"
-        self.assertEqual(self.client.patch(url % p1["payment_id"], {"payment_status": "Completed"}, format="json").status_code, 200)
-        self.assertEqual(self.client.patch(url % p2["payment_id"], {"payment_status": "Completed"}, format="json").status_code, 200)
-        dashboard = self.client.get("/api/dashboard/").data
-        self.assertEqual(dashboard["payments"]["outstanding_balance"], "0.00")
-        self.assertEqual(dashboard["payments"]["overpayment_total"], "500000.00")
+        for p in (p1, p2):
+            r = self.client.patch("/api/payments/%s/" % p["payment_id"], {"payment_status": "Completed"}, format="json")
+            self.assertEqual(r.status_code, 200)
 
     def test_no_payment_on_cancelled_booking(self):
         b = self.booking(self.s1, status="Cancelled")
@@ -78,8 +90,13 @@ class DashboardTests(SAHMSTestCase):
         self.assertEqual(p["completed_total"], "300000.00")
         self.assertEqual(p["pending_records_total"], "999999.00")
         self.assertEqual(p["pending_records_count"], 1)
-        self.assertEqual(p["overpayment_total"], "0.00")
-        self.assertEqual(p["overpaid_bookings_count"], 0)
+
+    def test_pending_active_completed_bookings_all_count_cancelled_does_not(self):
+        for st, status, price in ((self.s1, "Pending", "100000.00"), (self.s2, "Active", "200000.00"),
+                                  (self.s3, "Completed", "300000.00")):
+            self.booking(st, status=status, price=price)
+        self.booking(self.student("S4"), status="Cancelled", price="999999.00")
+        self.assertEqual(self.dash()["payments"]["outstanding_balance"], "600000.00")
 
     def test_overpaid_legacy_booking_never_negative(self):
         b = self.booking(self.s1, price="100000.00")

@@ -1,4 +1,6 @@
-# Migration plan – NOT executed. Needs your explicit approval.
+# Migration plan
+
+Status: **approved by the project owner on 28 Oct 2026 for creating the new framework tables only; the eight business tables must never be overwritten or altered.** Not yet executed by Claude: the live database is on your computer, so you run the commands below. `SAHMS/db_router.py` additionally blocks every migration operation for the `backend` app.
 
 ## What `python manage.py migrate` will do
 Rehearsed on a scratch SQLite copy that contained the eight business tables: **11 new tables, 0 changes to your tables.**
@@ -31,9 +33,10 @@ Requirement: the MySQL user in `.env` needs CREATE (and INDEX, REFERENCES) on `s
 3. **Add to `.env`**: `DJANGO_SECRET_KEY=<long random string>` and, locally, `DJANGO_DEBUG=True`.
 4. **Fingerprint before**: `python manage.py schema_fingerprint --save before.json` (read-only).
 5. **Preview**: `python manage.py migrate --plan` and confirm only the apps listed above appear.
-6. Tell me you approve → `python manage.py migrate`.
+6. `python manage.py migrate` (approved on 28 Oct 2026; creates the 11 new tables only).
 7. **Verify after**: `python manage.py schema_fingerprint --verify before.json` must print `OK`. Also compare row counts of the 8 tables with step 2.
-8. `python manage.py seed_roles` (creates 4 rows in `auth_group`), then `python manage.py createsuperuser`; assign other users to a group in `/admin/`.
+8. Optional, read-only: `python manage.py check_student_gender` shows the real `student.gender` values (needed for the male-only rule; see `docs/DECISIONS.md`).
+9. `python manage.py seed_roles` (creates 4 rows in `auth_group`), then `python manage.py createsuperuser`; assign other users to a group in `/admin/`.
 
 If step 7 ever reports `CHANGED`, stop and restore from the backup.
 

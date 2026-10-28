@@ -42,3 +42,10 @@ class AuthRoleTests(SAHMSTestCase):
         self.assertIn("national_id", self.client.get("/api/students/").data["results"][0])
         self.login(self.warden_u)
         self.assertNotIn("national_id", self.client.get("/api/students/").data["results"][0])
+
+
+class HealthTests(SAHMSTestCase):
+    def test_health_is_open_but_data_is_not(self):
+        c = APIClient()
+        self.assertEqual(c.get("/api/health/").status_code, 200)
+        self.assertEqual(c.get("/api/staff/").status_code, 401)

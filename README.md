@@ -43,3 +43,11 @@ psql -d hostel_management -f sql/03_queries.sql
 - [x] Normalization write-up drafted (see `docs/normalization.md`)
 - [ ] Schema run against a real PostgreSQL instance and extra queries added
 - [ ] Final report assembled
+
+
+## Backend (Django REST) – current state
+* Decisions and rules: `docs/DECISIONS.md`. Migration/backup plan: `docs/MIGRATION_PLAN.md` (nothing migrated yet).
+* `.env` (project root): `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DJANGO_SECRET_KEY`, and for local work `DJANGO_DEBUG=True`. Optional: `MALE_ONLY_ENFORCED` (default True). See `.env.example`.
+* Tests (isolated in-memory SQLite, never MySQL): `python manage.py test --settings=SAHMS.test_settings`
+* Note: the PostgreSQL files in `sql/` are an early draft; the live MySQL schema is the source of truth.
+* Before relying on the male-only rule, run `python manage.py check_student_gender` (read-only) to see the real `student.gender` values.

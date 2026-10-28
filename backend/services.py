@@ -67,13 +67,26 @@ def _peak_occupancy(existing, start, end):
 
 
 # ----------------------------------------------------------------- bookings
+MALE_VALUES = {"male", "m"}
+
+
+def is_male(gender):
+    return (gender or "").strip().casefold() in MALE_VALUES
+
+
 def _male_only_check(student, room):
-    restricted = {n.casefold() for n in settings.MALE_ONLY_HOSTELS}
-    if room.hostel.name.casefold() not in restricted:
+    """All SAHMS hostels accommodate male students only (project requirement).
+
+    student.gender is free text and nullable in MySQL (no CHECK constraint), so
+    the rule lives here. An empty or unrecognised value cannot be confirmed as
+    male and is rejected. Switch off with MALE_ONLY_ENFORCED=False in .env.
+    """
+    if not settings.MALE_ONLY_ENFORCED:
         return
-    gender = (student.gender or "").strip().casefold()
-    if gender not in ("male", "m"):
-        raise _err("student", f"{room.hostel.name} accepts male students only.")
+    if not is_male(student.gender):
+        raise _err("student",
+                   f"{room.hostel.name} accommodates male students only; this student's "
+                   f"gender is recorded as {student.gender!r}.")
 
 
 def _check_active_rules(student, room, start, end, exclude_id=None):
@@ -91,7 +104,6 @@ def _check_active_rules(student, room, start, end, exclude_id=None):
         raise _err("room",
                    f"Room {room.room_number} would exceed its capacity of "
                    f"{room.capacity} for these dates.")
-    _male_only_check(student, room)
 
 
 def _lock(student_id, room_id):
@@ -104,6 +116,7 @@ def _lock(student_id, room_id):
 def create_booking(save, data):
     status = data.get("status", "Pending")
     student, room = _lock(data["student"].pk, data["room"].pk)
+    _male_only_check(student, room)
     if status == ACTIVE:
         _check_active_rules(student, room, data["start_date"], data["end_date"])
     return save()
@@ -117,12 +130,10 @@ def update_booking(save, instance, data):
     instance = Booking.objects.select_for_update().get(pk=instance.pk)
     start = data.get("start_date", instance.start_date)
     end = data.get("end_date", instance.end_date)
+    if "room" in data or (new_status == ACTIVE and instance.status != ACTIVE):
+        _male_only_check(student, room)
     if new_status == ACTIVE:
         _check_active_rules(student, room, start, end, exclude_id=instance.pk)
-    price = data.get("agreed_price")
-    if price is not None and price < completed_total(instance):
-        raise _err("agreed_price",
-                   "Agreed price cannot be lower than completed payments already received.")
     return save()
 
 
@@ -138,23 +149,33 @@ def cancel_booking(booking):
 
 
 # ----------------------------------------------------------------- payments
-def _check_payment_booking(booking):
-    """Do not accept new/completed payments against a cancelled booking.
-
-    Genuine payments are never rejected just because the cumulative total is
-    above the agreed price. Overpayments are preserved and surfaced on the
-    dashboard for administrative review.
-    """
-    if booking.status == CANCELLED:
-        raise _err("booking", "Payments cannot be completed for a Cancelled booking.")
+def overpaid_by(booking, completed=None):
+    """How far completed payments exceed the agreed price (0 if they do not)."""
+    completed = completed_total(booking) if completed is None else completed
+    return max(completed - booking.agreed_price, ZERO)
 
 
+def review_reasons(booking, completed=None):
+    """Reasons an administrator should look at a booking's money (never blocks anything)."""
+    completed = completed_total(booking) if completed is None else completed
+    reasons = []
+    if completed > booking.agreed_price:
+        reasons.append("Overpayment: completed payments exceed the agreed price")
+    if booking.status == CANCELLED and completed > 0:
+        reasons.append("Cancelled booking still holds completed payments (refund review)")
+    return reasons
+
+
+# A genuine payment is never rejected, truncated or altered because completed
+# payments exceed the agreed price: it is kept as recorded and the booking is
+# flagged for administrative review (see review_reasons). The one structural
+# rule kept is that nothing new is recorded against a Cancelled booking; money
+# already received before a cancellation is flagged for refund review instead.
 @transaction.atomic
 def create_payment(save, data):
     booking = Booking.objects.select_for_update().get(pk=data["booking"].pk)
     if booking.status == CANCELLED:
         raise _err("booking", "Payments cannot be added to a Cancelled booking.")
-    _check_payment_booking(booking)
     return save()
 
 
@@ -162,27 +183,39 @@ def create_payment(save, data):
 def update_payment(save, instance, data):
     booking = Booking.objects.select_for_update().get(pk=instance.booking_id)
     instance = Payment.objects.select_for_update().get(pk=instance.pk)
-    new_status = data.get("payment_status", instance.payment_status)
-    amount = data.get("amount", instance.amount)
-    if new_status == COMPLETED:
-        _check_payment_booking(booking)
+    if (data.get("payment_status") == COMPLETED
+            and instance.payment_status != COMPLETED and booking.status == CANCELLED):
+        raise _err("booking", "A payment on a Cancelled booking cannot be completed.")
     return save()
 
 
-# ---------------------------------------------------------------- dashboard
-def overpayment_summary():
-    """Return the total excess completed payments and number of affected bookings."""
+def bookings_needing_review():
+    """Bookings with an overpayment or completed money on a Cancelled booking."""
     from django.db.models import Q
 
-    rows = (
-        Booking.objects.exclude(status=CANCELLED)
-        .annotate(paid=Sum("payments__amount", filter=Q(payments__payment_status=COMPLETED)))
-        .values_list("agreed_price", "paid")
-    )
-    excesses = [max((paid or ZERO) - price, ZERO) for price, paid in rows]
-    return sum(excesses, ZERO), sum(1 for amount in excesses if amount > ZERO)
+    rows = (Booking.objects.select_related("student", "room__hostel")
+            .annotate(paid=Sum("payments__amount",
+                               filter=Q(payments__payment_status=COMPLETED))))
+    out = []
+    for b in rows:
+        paid = b.paid or ZERO
+        reasons = review_reasons(b, paid)
+        if reasons:
+            out.append({
+                "booking_id": b.booking_id,
+                "student": f"{b.student.first_name} {b.student.last_name}",
+                "student_reg_number": b.student.reg_number,
+                "hostel": b.room.hostel.name, "room": b.room.room_number,
+                "status": b.status,
+                "agreed_price": str(b.agreed_price),
+                "completed_payments": str(paid),
+                "overpaid_by": str(overpaid_by(b, paid)),
+                "reasons": reasons,
+            })
+    return out
 
 
+# ---------------------------------------------------------------- dashboard
 def outstanding_balance():
     """Sum over non-cancelled bookings of max(agreed_price - completed, 0)."""
     from django.db.models import Q
