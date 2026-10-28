@@ -1,3 +1,82 @@
+# Environment variables and secrets
+
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Python cache files
+
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Python virtual environments
+
+.venv/
+venv/
+env/
+ENV/
+
+# Django generated files
+
 *.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+media/
+staticfiles/
+
+# Testing and tool caches
+
+.coverage
+.coverage.*
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node.js dependencies
+
+node_modules/
+frontend/node_modules/
+
+# Frontend build output
+
+dist/
+frontend/dist/
+frontend/.vite/
+
+# Frontend environment variables
+
+frontend/.env
+frontend/.env.*
+!frontend/.env.example
+!frontend/.env.*.example
+
+# Editor settings
+
+.vscode/
+.idea/
+
+# Operating system files
+
 .DS_Store
-*.env
+Thumbs.db
+Desktop.ini
+
+# Temporary files
+
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+
+# Database backups and exports
+
+*.sql
+*.sql.gz
+*.dump
+*.bak
+*.backup
