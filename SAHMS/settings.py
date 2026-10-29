@@ -1,5 +1,6 @@
 from pathlib import Path
 import os
+import urllib.parse
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -32,7 +33,7 @@ def _env_list(name, default):
 
 
 # Comma-separated in .env for deployment, e.g. ALLOWED_HOSTS=hostel.example.com
-ALLOWED_HOSTS = _env_list("ALLOWED_HOSTS", ["127.0.0.1", "localhost"])
+ALLOWED_HOSTS = _env_list("ALLOWED_HOSTS", ["127.0.0.1", "localhost", ".onrender.com", ".vercel.app"])
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -40,6 +41,7 @@ INSTALLED_APPS = [
     "django.contrib.contenttypes",
     "django.contrib.sessions",
     "django.contrib.messages",
+    "whitenoise.runserver_nostatic",
     "django.contrib.staticfiles",
 
     # Existing SAHMS application
@@ -53,10 +55,9 @@ INSTALLED_APPS = [
     "corsheaders",
 ]
 
-
-
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
 
     # Allow requests from the React frontend
@@ -68,7 +69,6 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
-
 
 ROOT_URLCONF = "SAHMS.urls"
 
@@ -90,17 +90,38 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "SAHMS.wsgi.application"
 
+# ---------------------------------------------------------------------------
+# Database configuration: supports local MySQL, cloud URLs, and cloud providers
+# ---------------------------------------------------------------------------
+db_url = os.getenv("DATABASE_URL") or os.getenv("MYSQL_URL")
+if db_url:
+    parsed = urllib.parse.urlparse(db_url)
+    db_name = parsed.path.lstrip("/")
+    db_user = urllib.parse.unquote(parsed.username or "")
+    db_password = urllib.parse.unquote(parsed.password or "")
+    db_host = parsed.hostname or "127.0.0.1"
+    db_port = str(parsed.port or 3306)
+else:
+    db_name = os.getenv("DB_NAME") or os.getenv("MYSQLDATABASE") or os.getenv("TIDB_DATABASE") or "student_accommodation"
+    db_user = os.getenv("DB_USER") or os.getenv("MYSQLUSER") or os.getenv("TIDB_USER") or "root"
+    db_password = os.getenv("DB_PASSWORD") or os.getenv("MYSQLPASSWORD") or os.getenv("TIDB_PASSWORD") or ""
+    db_host = os.getenv("DB_HOST") or os.getenv("MYSQLHOST") or os.getenv("TIDB_HOST") or "127.0.0.1"
+    db_port = os.getenv("DB_PORT") or os.getenv("MYSQLPORT") or os.getenv("TIDB_PORT") or "3306"
+
+db_options = {"charset": "utf8mb4"}
+# Enable SSL mode if requested (required for TiDB Cloud / Aiven)
+if os.getenv("DB_SSL", "").strip().lower() in ("true", "1", "yes", "required"):
+    db_options["ssl"] = {"ssl_mode": "REQUIRED"}
+
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.mysql",
-        "NAME": os.getenv("DB_NAME", "student_accommodation"),
-        "USER": os.getenv("DB_USER", "root"),
-        "PASSWORD": os.getenv("DB_PASSWORD", ""),
-        "HOST": os.getenv("DB_HOST", "127.0.0.1"),
-        "PORT": os.getenv("DB_PORT", "3306"),
-        "OPTIONS": {
-            "charset": "utf8mb4",
-        },
+        "NAME": db_name,
+        "USER": db_user,
+        "PASSWORD": db_password,
+        "HOST": db_host,
+        "PORT": db_port,
+        "OPTIONS": db_options,
     }
 }
 
@@ -128,21 +149,31 @@ USE_I18N = True
 USE_TZ = True
 
 STATIC_URL = "static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
+
+STORAGES = {
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    },
+}
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-
-
-# React (Vite) dev server is allowed to call the API
-# Comma-separated in .env for deployment, e.g. CORS_ALLOWED_ORIGINS=https://hostel.example.com
+# React (Vite) frontend allowed origins
+# Comma-separated in .env for deployment, e.g. CORS_ALLOWED_ORIGINS=https://sahms.vercel.app
 CORS_ALLOWED_ORIGINS = _env_list("CORS_ALLOWED_ORIGINS", [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
 ])
-# Vite moves to 5174, 5175... when 5173 is busy; that silently breaks the app
-# with a CORS error. In local development (DEBUG) allow any localhost port.
+
+# In local development (DEBUG) allow any localhost port. In production, allow *.vercel.app if configured
 if DEBUG:
     CORS_ALLOWED_ORIGIN_REGEXES = [r"^http://(localhost|127\.0\.0\.1):\d+$"]
+elif _env_bool("CORS_ALLOW_ALL_VERCEL", True):
+    CORS_ALLOWED_ORIGIN_REGEXES = [r"^https://.*\.vercel\.app$"]
 
 # ---------------------------------------------------------------------------
 # REST framework: token authentication + role-based permissions
