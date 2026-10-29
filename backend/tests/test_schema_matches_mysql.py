@@ -72,7 +72,7 @@ class SchemaMatchesMySQL(SimpleTestCase):
                          {"Pending", "Completed", "Failed", "Refunded"})
 
     def test_gender_column_is_free_text_without_constraint(self):
-        """Documents why the male-only rule can only be enforced in the application."""
+        """Documents that gender is free text, so the API does not rely on it for any rule."""
         gender = self.live["student"]["cols"]["gender"]
         self.assertEqual((gender["type"], gender["null"]), ("varchar(10)", True))
         self.assertNotIn("gender", self.live["student"]["checks"])

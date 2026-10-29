@@ -11,11 +11,12 @@ class AuthRoleTests(SAHMSTestCase):
 
     def test_login_returns_token_and_roles(self):
         c = APIClient()
-        r = c.post("/api/auth/login/", {"username": "admin1", "password": "pw"}, format="json")
+        r = c.post("/api/auth/login/", {"username": "admin1", "password": "pw", "role": "Admin"}, format="json")
         self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data["signed_in_as"], "Admin")
         self.assertIn("token", r.data)
         self.assertEqual(r.data["roles"], ["Admin"])
-        bad = c.post("/api/auth/login/", {"username": "admin1", "password": "no"}, format="json")
+        bad = c.post("/api/auth/login/", {"username": "admin1", "password": "no", "role": "Admin"}, format="json")
         self.assertEqual(bad.status_code, 400)
         c.credentials(HTTP_AUTHORIZATION="Token " + r.data["token"])
         self.assertEqual(c.get("/api/students/").status_code, 200)
@@ -54,7 +55,23 @@ class HealthTests(SAHMSTestCase):
         from django.contrib.auth.models import User
         User.objects.create_superuser("root1", password="pw")
         c = APIClient()
-        r = c.post("/api/auth/login/", {"username": "root1", "password": "pw"}, format="json")
+        r = c.post("/api/auth/login/", {"username": "root1", "password": "pw", "role": "Admin"}, format="json")
         self.assertTrue(r.data["is_superuser"])
         c.credentials(HTTP_AUTHORIZATION="Token " + r.data["token"])
         self.assertTrue(c.get("/api/auth/me/").data["is_superuser"])
+
+    def test_login_requires_the_matching_role(self):
+        c = APIClient()
+        post = lambda u, role: c.post("/api/auth/login/", {"username": u, "password": "pw", "role": role}, format="json")
+        self.assertEqual(post("warden1", "Warden").status_code, 200)
+        self.assertEqual(post("warden1", "Admin").status_code, 400)     # not in that group
+        self.assertEqual(post("ro1", "Warden").status_code, 400)
+        self.assertEqual(post("warden1", "").status_code, 400)          # role is mandatory
+        self.assertEqual(post("warden1", "Nonsense").status_code, 400)
+        self.assertEqual(post("care1", "Caretaker").status_code, 200)
+
+    def test_role_failure_message_is_generic(self):
+        c = APIClient()
+        wrong_role = c.post("/api/auth/login/", {"username": "warden1", "password": "pw", "role": "Admin"}, format="json")
+        wrong_pw = c.post("/api/auth/login/", {"username": "warden1", "password": "x", "role": "Warden"}, format="json")
+        self.assertEqual(wrong_role.data, wrong_pw.data)

@@ -29,17 +29,6 @@ class StudentSerializer(serializers.ModelSerializer):
         fields = ["student_id", "reg_number", "first_name", "last_name", "gender",
                   "phone", "email", "program", "year_of_study", "national_id"]
 
-    def validate(self, attrs):
-        from django.conf import settings
-        inst = self.instance
-        if (inst and "gender" in attrs and settings.MALE_ONLY_ENFORCED
-                and not services.is_male(attrs["gender"])
-                and Booking.objects.filter(student=inst, status__in=("Pending", "Active")).exists()):
-            raise serializers.ValidationError(
-                {"gender": "Cannot change gender to a non-male value while the student "
-                           "has a Pending or Active booking (hostels are male-only)."})
-        return attrs
-
     def get_fields(self):
         fields = super().get_fields()
         request = self.context.get("request")

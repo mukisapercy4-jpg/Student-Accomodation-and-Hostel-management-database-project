@@ -13,7 +13,7 @@ if the live schema changes, paste a fresh export over the snapshot.
 | 3 | No room above capacity among overlapping active bookings; no student with two overlapping active bookings; concurrency-safe | `backend/services.py`: inclusive date overlap, exact peak-occupancy check, `SELECT … FOR UPDATE` on student then room inside `transaction.atomic()`. Applied when a booking is created as, or changed to, `Active`. |
 | 4 | Completed payments = `payment_status='Completed'`; **Outstanding Balance** = Σ max(agreed_price − completed, 0) over **Pending, Active and Completed** bookings (Cancelled excluded); pending records shown separately | `services.outstanding_balance()`; dashboard `payments` block. Status values verified against the CHECK constraints (booking: Pending/Active/Completed/Cancelled; payment: Pending/Completed/Failed/Refunded). Pending/Failed/Refunded payments never count as paid. |
 | 5 | No permanent deletes of bookings/payments; other deletes only when allowed | No DELETE route for bookings/payments (405). Bookings: `POST /bookings/<id>/cancel/`. Payments: status `Failed` / `Refunded`. Other records: 409 if anything still references them. Django admin is view-only. |
-| 6 | Male-only: all hostels accommodate male students only (project requirement) | Verified: `student.gender` is `varchar(10) DEFAULT NULL` with **no CHECK constraint**, and `hostel` has no gender column. No column added. Enforced in the API (`services._male_only_check`): a booking can be created, or activated, only for a student whose gender is `Male` or `M` (case/space-insensitive). Blank or any other value is rejected with a clear message; a student's gender cannot be changed to non-male while they hold a Pending/Active booking. See *Male-only limitations* below. |
+| 6 | **Changed 29 Oct 2026: hostels accept students of every gender.** The earlier male-only rule was removed. | No gender rule exists in the API. `student.gender` (nullable `varchar(10)`, no CHECK) is stored and displayed only; no column was added or changed. |
 | 7 | Isolated SQLite tests for the `managed = False` models | `SAHMS/test_settings.py` + `SAHMS/testing.py`; see below. |
 
 ## Overpayments (decision 3 of 28 Oct)
@@ -25,16 +25,9 @@ if the live schema changes, paste a fresh export over the snapshot.
 * Lowering a booking's agreed price below the completed payments is allowed and flagged the same way.
 * Kept as a structural rule (not about the amount): new payments cannot be added to a **Cancelled** booking, nor can a Pending one be completed there.
 
-## Male-only limitations
-* `gender` is free text, so a typo (for example "Mlae") or an empty value blocks a booking until the student record is corrected. That is deliberate: the rule fails closed.
-* Existing Pending/Active bookings of non-male students are left untouched; the rule applies to new and newly activated bookings.
-* Before relying on it, run the read-only report on your live database: `python manage.py check_student_gender`. It lists every stored value, which are accepted, and how many students and open bookings would be affected. I could not run it against MySQL, because I only have your schema, not your data.
-* A reliable guarantee at database level would need a CHECK constraint or lookup on `student.gender`. That is a schema change, so it is not proposed or made; tell me if you want it discussed.
-* `MALE_ONLY_ENFORCED=False` in `.env` switches the rule off; the default is on.
-
 ## Assumptions still open
 * `national_id` is visible/writable by Admin only.
-* Pending bookings are not limited by capacity or overlap; only Active ones are. The male-only rule does apply to Pending ones.
+* Pending bookings are not limited by capacity or overlap; only Active ones are.
 * The view (and the dashboard) count every `Active` booking regardless of dates, so an old booking never moved to Completed still occupies a space.
 
 ## Roles
@@ -59,3 +52,8 @@ if the live schema changes, paste a fresh export over the snapshot.
 * `request_date` (maintenance) and `visit_date` (visitors) default to today when omitted, like `payment_date`.
 * `ALLOWED_HOSTS` and `CORS_ALLOWED_ORIGINS` can be set from `.env`; local defaults are unchanged.
 * No new database tables were created. The only tables Django adds are its own login/framework tables via the documented migration; the 8 business tables remain untouched and protected by `SAHMS/db_router.py`.
+
+## Audit trail (added in main7)
+* `audittrail` app: `AuditEvent` (create/update/delete: actor, resource, record id, **names** of changed fields, never values), `BookingStatusHistory`, `PaymentStatusHistory`. Read-only API for Admin only: `/api/audit-logs/`, `/api/booking-status-history/`, `/api/payment-status-history/`.
+* The audit row is written in the same transaction as the change: if it cannot be saved, the change is rolled back (tests in `backend/tests/test_audit_integrity.py`).
+* Design-only files, **not executed**: `docs/OUTSTANDING_BALANCE_VIEW.sql` (a new view; creating it needs your approval and a comparison with `services.outstanding_balance()` first), `docs/INDEX_REVIEW.md` (index candidates on existing tables = schema change, needs your approval), `docs/MYSQL_LEAST_PRIVILEGE.md` (account plan).

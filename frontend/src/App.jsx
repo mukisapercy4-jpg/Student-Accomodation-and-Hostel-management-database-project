@@ -31,7 +31,15 @@ const COLUMNS = {
 };
 const MONEY_FIELDS = new Set(['agreed_price', 'amount', 'price_per_semester']);
 
+const LOGIN_ROLES = [
+  ['Admin', 'Full access, audit trail, history'],
+  ['Warden', 'Bookings, payments, students, rooms'],
+  ['Caretaker', 'Maintenance and visitors'],
+  ['ReadOnly', 'View records only'],
+];
+
 function Login({ onLogin }) {
+  const [role, setRole] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -41,7 +49,7 @@ function Login({ onLogin }) {
     e.preventDefault();
     setBusy(true); setError('');
     try {
-      const data = await api('/auth/login/', { method: 'POST', body: JSON.stringify({ username, password }) });
+      const data = await api('/auth/login/', { method: 'POST', body: JSON.stringify({ username, password, role }) });
       tokenStore.set(data.token);
       onLogin(data);
     } catch (err) { setError(err.message); } finally { setBusy(false); }
@@ -51,11 +59,21 @@ function Login({ onLogin }) {
     <div className="loginwrap">
       <form className="loginbox" onSubmit={submit}>
         <h1>SAHMS</h1>
-        <p>Sign in to the hostel management system</p>
-        <input placeholder="Username" value={username} onChange={(e) => setUsername(e.target.value)} autoFocus />
+        <p>Choose your role, then sign in with your own username and password</p>
+        <div className="rolepick" role="radiogroup" aria-label="Role">
+          {LOGIN_ROLES.map(([name, note]) => (
+            <button type="button" key={name} role="radio" aria-checked={role === name}
+              className={role === name ? 'rolecard on' : 'rolecard'} onClick={() => setRole(name)}>
+              <strong>{name}</strong><small>{note}</small>
+            </button>
+          ))}
+        </div>
+        <input placeholder="Username" value={username} onChange={(e) => setUsername(e.target.value)} />
         <input placeholder="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
         {error && <div className="formerror">{error}</div>}
-        <button className="primary" disabled={busy || !username || !password}>{busy ? 'Signing in…' : 'Sign in'}</button>
+        <button className="primary" disabled={busy || !role || !username || !password}>
+          {busy ? 'Signing in…' : role ? `Sign in as ${role}` : 'Select a role first'}
+        </button>
       </form>
     </div>
   );

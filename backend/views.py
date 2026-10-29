@@ -1,6 +1,7 @@
 from decimal import Decimal
 
 from django.contrib.auth import authenticate
+from django.db import transaction
 from django.db.models import Count, IntegerField, OuterRef, Q, Subquery, Sum
 from django.db.models.functions import Coalesce
 from rest_framework import status, viewsets
@@ -69,7 +70,9 @@ class BaseViewSet(viewsets.ModelViewSet):
             request_id=str(meta.get("HTTP_X_REQUEST_ID", ""))[:64],
         )
 
+    @transaction.atomic
     def perform_create(self, serializer):
+        # one transaction: if the audit/history row cannot be written, the change is rolled back
         obj = serializer.save()
         self._audit("create", obj, serializer.validated_data.keys(), "Record created")
         if isinstance(obj, Booking):
@@ -83,6 +86,7 @@ class BaseViewSet(viewsets.ModelViewSet):
                 actor=self.request.user if self.request.user.is_authenticated else None,
                 reason=str(self.request.data.get("reason", ""))[:255])
 
+    @transaction.atomic
     def perform_update(self, serializer):
         old = serializer.instance
         old_status = getattr(old, "status", getattr(old, "payment_status", None))
@@ -110,9 +114,12 @@ class BaseViewSet(viewsets.ModelViewSet):
                     status=status.HTTP_409_CONFLICT)
         return super().destroy(request, *args, **kwargs)
 
+    @transaction.atomic
     def perform_destroy(self, instance):
-        self._audit("delete", instance, (), "Record deleted")
-        return super().perform_destroy(instance)
+        # delete first (it may be refused by the database), then record it; pk is cleared by delete()
+        snapshot = type("Gone", (), {"pk": instance.pk})()
+        super().perform_destroy(instance)
+        self._audit("delete", snapshot, (), "Record deleted")
 
 
 class StaffViewSet(BaseViewSet):
@@ -185,6 +192,7 @@ class BookingViewSet(BaseViewSet):
                      "student__last_name", "room__room_number")
 
     @action(detail=True, methods=["post"])
+    @transaction.atomic
     def cancel(self, request, pk=None):
         original = self.get_object()
         old_status = original.status
@@ -236,10 +244,13 @@ class AuditEventViewSet(viewsets.ReadOnlyModelViewSet):
     resource = "audit_logs"
     queryset = AuditEvent.objects.select_related("actor").all()
     serializer_class = AuditEventSerializer
-    search_fields = ("entity_id", "description", "request_id")
 
     def get_queryset(self):
         qs = super().get_queryset()
+        term = self.request.query_params.get("search", "").strip()
+        if term:
+            qs = qs.filter(Q(entity_id__icontains=term) | Q(description__icontains=term)
+                           | Q(request_id__icontains=term))
         for key in ("action", "resource", "actor_id"):
             value = self.request.query_params.get(key)
             if value not in (None, ""):
@@ -296,11 +307,18 @@ class LoginView(APIView):
         user = authenticate(request,
                             username=request.data.get("username", ""),
                             password=request.data.get("password", ""))
-        if user is None or not user.is_active:
-            return Response({"detail": "Invalid username or password."},
-                            status=status.HTTP_400_BAD_REQUEST)
+        role = str(request.data.get("role", "")).strip()
+        # One generic message for every failure, so a caller cannot learn
+        # which usernames exist or which roles an account holds.
+        failed = Response({"detail": "Sign-in failed. Check your username, password and selected role."},
+                          status=status.HTTP_400_BAD_REQUEST)
+        from .roles import ROLES
+        if user is None or not user.is_active or role not in ROLES:
+            return failed
+        if not (user.is_superuser or role in user_roles(user)):
+            return failed
         token, _ = Token.objects.get_or_create(user=user)
-        return Response({"token": token.key, **_user_payload(user)})
+        return Response({"token": token.key, "signed_in_as": role, **_user_payload(user)})
 
 
 class LogoutView(APIView):

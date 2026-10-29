@@ -3,7 +3,7 @@
 Status: **approved by the project owner on 28 Oct 2026 for creating the new framework tables only; the eight business tables must never be overwritten or altered.** Not yet executed by Claude: the live database is on your computer, so you run the commands below. `SAHMS/db_router.py` additionally blocks every migration operation for the `backend` app.
 
 ## What `python manage.py migrate` will do
-Rehearsed on a scratch SQLite copy that contained the eight business tables: **11 new tables, 0 changes to your tables.**
+Rehearsed on a scratch SQLite copy that contained the eight business tables: **14 new tables, 0 changes to your tables.**
 The `backend` app has no migrations and its models are `managed = False`, so Django emits no DDL for them.
 
 New tables (all created, none altered):
@@ -17,11 +17,16 @@ New tables (all created, none altered):
 | `django_admin_log` | admin |
 | `django_session` | sessions |
 | `authtoken_token` | DRF token login |
+| `audittrail_auditevent` | audit log: who did what to which record (field names only, never values) |
+| `audittrail_bookingstatushistory` | every booking status change |
+| `audittrail_paymentstatushistory` | every payment status change |
+
+The three `audittrail_*` tables and their indexes (`audit_*_idx`, `book_hist_time_idx`, `pay_hist_time_idx`) belong to the `audittrail` app (`audittrail/migrations/0001_initial.py`). They reference `auth_user` only. They hold no foreign key to your business tables (booking and payment ids are stored as plain numbers).
 
 Rows are also inserted (after migrate) into `django_content_type` and `auth_permission` for the eight business models. Those are rows in the new tables, not in yours.
 Tables changed: **none**. Dropped: **none**. Your view and index `idx_student_last_name` are not touched.
 
-Migration plan (22 steps): contenttypes 0001–0002, auth 0001–0012, admin 0001–0003, authtoken 0001–0004, sessions 0001.
+Migration plan (23 steps): contenttypes 0001–0002, auth 0001–0012, admin 0001–0003, authtoken 0001–0004, sessions 0001, audittrail 0001.
 
 Requirement: the MySQL user in `.env` needs CREATE (and INDEX, REFERENCES) on `student_accommodation`. MySQL DDL cannot be rolled back, so the backup below is your rollback.
 
@@ -33,9 +38,9 @@ Requirement: the MySQL user in `.env` needs CREATE (and INDEX, REFERENCES) on `s
 3. **Add to `.env`**: `DJANGO_SECRET_KEY=<long random string>` and, locally, `DJANGO_DEBUG=True`.
 4. **Fingerprint before**: `python manage.py schema_fingerprint --save before.json` (read-only).
 5. **Preview**: `python manage.py migrate --plan` and confirm only the apps listed above appear.
-6. `python manage.py migrate` (approved on 28 Oct 2026; creates the 11 new tables only).
+6. `python manage.py migrate` (approved on 28 Oct 2026; creates the 14 new tables only).
 7. **Verify after**: `python manage.py schema_fingerprint --verify before.json` must print `OK`. Also compare row counts of the 8 tables with step 2.
-8. Optional, read-only: `python manage.py check_student_gender` shows the real `student.gender` values (needed for the male-only rule; see `docs/DECISIONS.md`).
+8. Optional, read-only: `python manage.py check_student_gender` lists the distinct `student.gender` values.
 9. `python manage.py seed_roles` (creates 4 rows in `auth_group`), then `python manage.py createsuperuser`; assign other users to a group in `/admin/`.
 
 If step 7 ever reports `CHANGED`, stop and restore from the backup.

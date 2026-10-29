@@ -25,7 +25,7 @@ Extract to a new folder and compare with your repo (for example in VS Code: *Com
 3. `python manage.py test --settings=SAHMS.test_settings` – must pass; it never touches MySQL.
 4. Backup, then the numbered steps in `docs/MIGRATION_PLAN.md` (fingerprint before → `migrate` → fingerprint after must say OK).
 5. `python manage.py seed_roles`, `python manage.py createsuperuser`.
-6. `python manage.py check_student_gender` (read-only) to see real gender values.
+6. `python manage.py check_student_gender` (optional, read-only) lists the stored gender values.
 7. `python manage.py runserver`, and in `frontend/`: `npm install`, `npm run dev`; sign in at http://localhost:5173.
 
 ## About the `...-main4.zip` branch (ChatGPT era)
