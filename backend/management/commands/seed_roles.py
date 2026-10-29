@@ -5,7 +5,7 @@ from backend.roles import ROLES
 
 
 class Command(BaseCommand):
-    help = ("Create the four role groups (Admin, Warden, Caretaker, ReadOnly). "
+    help = ("Create the role groups (Admin, Warden, Caretaker, ReadOnly, Student). "
             "Touches only Django's auth_group table.")
 
     def handle(self, *args, **options):

@@ -1,26 +1,30 @@
 from decimal import Decimal
 
+from django.conf import settings
 from django.contrib.auth import authenticate
 from django.db import transaction
-from django.db.models import Count, IntegerField, OuterRef, Q, Subquery, Sum
+from django.db.models import Count, Exists, IntegerField, OuterRef, Q, Subquery, Sum
 from django.db.models.functions import Coalesce
 from rest_framework import status, viewsets
 from rest_framework.authtoken.models import Token
 from rest_framework.decorators import action
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.throttling import AnonRateThrottle
 from rest_framework.views import APIView
+from rest_framework_simplejwt.views import TokenObtainPairView
 
 from . import services
 from audittrail.models import AuditEvent, BookingStatusHistory, PaymentStatusHistory
 from .models import (
     Booking, Hostel, MaintenanceRequest, Payment, Room, Staff, Student, Visitor,
 )
-from .roles import MATRIX, user_roles
+from .roles import student_id_for, student_only, user_payload, user_roles
 from .serializers import (
+    AvailableRoomsQuerySerializer, MomoInitiateSerializer, ReassignRoomSerializer,
     BookingSerializer, HostelSerializer, MaintenanceRequestSerializer,
-    PaymentSerializer, RoomSerializer, StaffSerializer, StudentSerializer,
+    PaymentSerializer, RoleTokenObtainPairSerializer, RoomSerializer, StaffSerializer, StudentSerializer,
     VisitorSerializer, AuditEventSerializer, BookingStatusHistorySerializer,
     PaymentStatusHistorySerializer,
 )
@@ -35,9 +39,14 @@ class BaseViewSet(viewsets.ModelViewSet):
     filter_params = {}      # query param -> ORM lookup
     search_fields = ()
     dependents = ()         # (queryset-factory, label) blocking a delete
+    student_scope = None    # ORM path to student_id: a Student-role login only sees its own rows
 
     def get_queryset(self):
         qs = super().get_queryset()
+        user = self.request.user
+        if self.student_scope and student_only(user):
+            sid = student_id_for(user)
+            qs = qs.filter(**{self.student_scope: sid}) if sid else qs.none()
         for param, lookup in self.filter_params.items():
             value = self.request.query_params.get(param)
             if value not in (None, ""):
@@ -166,7 +175,11 @@ class HostelViewSet(BaseViewSet):
 class RoomViewSet(BaseViewSet):
     resource = "rooms"
     queryset = Room.objects.select_related("hostel").annotate(
-        occupied_spaces=Count("bookings", filter=Q(bookings__status="Active"))
+        occupied_spaces=Count("bookings", filter=Q(bookings__status="Active")),
+        has_blocking_maintenance=Exists(MaintenanceRequest.objects.filter(
+            room=OuterRef("pk"),
+            status__in=services.MAINTENANCE_OPEN_STATUSES,
+            priority__in=services.MAINTENANCE_BLOCKING_PRIORITIES)),
     ).order_by("room_id")
     serializer_class = RoomSerializer
     filter_params = {"hostel": "hostel_id"}
@@ -175,6 +188,30 @@ class RoomViewSet(BaseViewSet):
         (lambda o: Booking.objects.filter(room=o), "booking(s)"),
         (lambda o: MaintenanceRequest.objects.filter(room=o), "maintenance request(s)"),
     )
+
+    @action(detail=False, methods=["get"])
+    def available(self, request):
+        """Rooms with at least one free space for the whole of start_date..end_date.
+
+        Read-only (needs `rooms` read). Rooms under blocking maintenance are left out.
+        """
+        q = AvailableRoomsQuerySerializer(data=request.query_params)
+        q.is_valid(raise_exception=True)
+        rooms = Room.objects.select_related("hostel").order_by("room_id")
+        if q.validated_data.get("hostel"):
+            rooms = rooms.filter(hostel_id=q.validated_data["hostel"])
+        start, end = q.validated_data["start_date"], q.validated_data["end_date"]
+        rows = []
+        for room in rooms:
+            if services.blocking_maintenance_exists(room):
+                continue
+            free = services.free_spaces_in_window(room, start, end)
+            if free > 0:
+                data = RoomSerializer(room).data
+                data["free_spaces_in_window"] = free
+                rows.append(data)
+        page = self.paginate_queryset(rows)
+        return self.get_paginated_response(page) if page is not None else Response(rows)
 
 
 class BookingViewSet(BaseViewSet):
@@ -190,6 +227,27 @@ class BookingViewSet(BaseViewSet):
                      "academic_year": "academic_year", "semester": "semester"}
     search_fields = ("student__reg_number", "student__first_name",
                      "student__last_name", "room__room_number")
+    student_scope = "student_id"
+    # these POST actions modify an existing booking, so they need "update" (students only hold read+create)
+    action_verbs = {"cancel": "update", "approve": "update", "reject": "update", "reassign": "update"}
+
+    def create(self, request, *args, **kwargs):
+        """Staff create as before. A student books for themselves: the student is taken from the
+        login (never from the body), the booking starts Pending and the price is the room's price."""
+        if not student_only(request.user):
+            return super().create(request, *args, **kwargs)
+        sid = student_id_for(request.user)
+        if sid is None:
+            raise PermissionDenied("This login is not linked to a student record.")
+        data = {k: v for k, v in request.data.items()}
+        data.pop("agreed_price", None)
+        data.update(student=sid, status="Pending")
+        serializer = self.get_serializer(data=data)
+        serializer.is_valid(raise_exception=True)
+        if services.blocking_maintenance_exists(serializer.validated_data["room"]):
+            raise ValidationError({"room": "This room is under maintenance and cannot be booked."})
+        self.perform_create(serializer)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=["post"])
     @transaction.atomic
@@ -210,6 +268,48 @@ class BookingViewSet(BaseViewSet):
         data["refund_review_required"] = completed > 0
         return Response(data)
 
+    def _history(self, booking, old_status, reason):
+        actor = self.request.user if self.request.user.is_authenticated else None
+        if old_status != booking.status:
+            BookingStatusHistory.objects.create(
+                booking_id=booking.pk, old_status=old_status, new_status=booking.status,
+                actor=actor, reason=reason[:255])
+
+    @action(detail=True, methods=["post"])
+    @transaction.atomic
+    def approve(self, request, pk=None):
+        """Pending -> Active (capacity and overlap rules apply). Audited in one transaction."""
+        original = self.get_object()
+        old_status = original.status
+        booking = services.approve_booking(original)
+        reason = str(request.data.get("reason", ""))
+        self._history(booking, old_status, reason)
+        self._audit("update", booking, ["status"], "Booking approved")
+        return Response(self.get_serializer(self.get_queryset().get(pk=booking.pk)).data)
+
+    @action(detail=True, methods=["post"])
+    @transaction.atomic
+    def reject(self, request, pk=None):
+        """Pending -> Cancelled with an optional reason."""
+        original = self.get_object()
+        old_status = original.status
+        booking = services.reject_booking(original)
+        self._history(booking, old_status, str(request.data.get("reason", "")))
+        self._audit("update", booking, ["status"], "Booking rejected")
+        return Response(self.get_serializer(self.get_queryset().get(pk=booking.pk)).data)
+
+    @action(detail=True, methods=["post"])
+    @transaction.atomic
+    def reassign(self, request, pk=None):
+        """Move a Pending/Active booking to another room. Body: {"room": <room_id>}."""
+        original = self.get_object()
+        body = ReassignRoomSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        booking, old_room_id = services.reassign_room(original, body.validated_data["room"])
+        self._audit("update", booking, ["room"],
+                    f"Room reassigned from room #{old_room_id} to room #{booking.room_id}")
+        return Response(self.get_serializer(self.get_queryset().get(pk=booking.pk)).data)
+
 
 class PaymentViewSet(BaseViewSet):
     """No DELETE: use payment_status Failed / Refunded."""
@@ -221,6 +321,61 @@ class PaymentViewSet(BaseViewSet):
     filter_params = {"status": "payment_status", "booking": "booking_id",
                      "method": "payment_method"}
     search_fields = ("reference_number",)
+    student_scope = "booking__student_id"
+    # POST payments/momo/ and payments/<id>/momo-confirm/ are open to students for their own bookings
+    action_resources = {"momo": "momo_payments", "momo_confirm": "momo_payments"}
+
+    @action(detail=False, methods=["post"], url_path="momo")
+    @transaction.atomic
+    def momo(self, request):
+        """Record a Pending Mobile Money payment (SIMULATED, no gateway call).
+
+        Body: booking, amount, network (MTN|Airtel), phone. The phone is validated
+        and never stored. Settle it afterwards with PATCH payment_status
+        Completed/Failed, which writes the status history and audit entry.
+        """
+        body = MomoInitiateSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        d = body.validated_data
+        if student_only(request.user) and d["booking"].student_id != student_id_for(request.user):
+            raise PermissionDenied("You can only pay for your own bookings.")
+        payment, masked = services.initiate_momo_payment(
+            d["booking"], d["amount"], d["phone"], d["network"])
+        actor = request.user if request.user.is_authenticated else None
+        PaymentStatusHistory.objects.create(
+            payment_id=payment.pk, old_status="", new_status=payment.payment_status,
+            actor=actor, reason=f"Mobile Money request ({d['network']})")
+        self._audit("create", payment,
+                    ["booking", "payment_method", "payment_status", "reference_number"],
+                    f"Mobile Money payment initiated ({d['network']})")
+        data = self.get_serializer(payment).data
+        data.update({"network": d["network"], "phone_masked": masked, "simulated": True})
+        return Response(data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["post"], url_path="momo-confirm")
+    @transaction.atomic
+    def momo_confirm(self, request, pk=None):
+        """SIMULATED gateway callback. Body: {"outcome": "success" | "failure"}.
+
+        Settles a Pending Mobile Money payment (history + audit entry in the same transaction).
+        Only works while settings.MOMO_SIMULATE is True; a real gateway would call a webhook instead.
+        Students reach only their own payments (the queryset is scoped), so others 404.
+        """
+        if not settings.MOMO_SIMULATE:
+            raise PermissionDenied("No Mobile Money gateway is connected, so this payment cannot be confirmed here.")
+        outcome = request.data.get("outcome")
+        if outcome not in ("success", "failure"):
+            raise ValidationError({"outcome": "Use 'success' or 'failure'."})
+        payment = self.get_object()
+        old = payment.payment_status
+        payment = services.settle_momo_payment(payment, "Completed" if outcome == "success" else "Failed")
+        actor = request.user if request.user.is_authenticated else None
+        PaymentStatusHistory.objects.create(
+            payment_id=payment.pk, old_status=old, new_status=payment.payment_status,
+            actor=actor, reason="Mobile Money callback (simulated)")
+        self._audit("update", payment, ["payment_status"],
+                    f"Mobile Money payment {payment.payment_status.lower()} (simulated)")
+        return Response(self.get_serializer(payment).data)
 
 
 class MaintenanceViewSet(BaseViewSet):
@@ -318,7 +473,20 @@ class LoginView(APIView):
         if not (user.is_superuser or role in user_roles(user)):
             return failed
         token, _ = Token.objects.get_or_create(user=user)
-        return Response({"token": token.key, "signed_in_as": role, **_user_payload(user)})
+        return Response({"token": token.key, "signed_in_as": role,
+                         **_user_payload(user, signed_in_as=role)})
+
+
+class RoleTokenObtainPairView(TokenObtainPairView):
+    """POST /api/auth/token/  {username, password} -> {access, refresh, role, home, ...}.
+
+    The role (STUDENT | MANAGER | SUPER_ADMIN | ...) is returned in the body and inside the JWT
+    claims. Send the access token as `Authorization: Bearer <access>`.
+    """
+    permission_classes = [AllowAny]
+    authentication_classes = []
+    throttle_classes = [LoginThrottle]
+    serializer_class = RoleTokenObtainPairSerializer
 
 
 class LogoutView(APIView):
@@ -332,21 +500,7 @@ class MeView(APIView):
         return Response(_user_payload(request.user))
 
 
-def _user_payload(user):
-    from .roles import ROLES
-    roles = sorted(user_roles(user))
-    if user.is_superuser:
-        roles = list(ROLES)
-    return {"username": user.get_username(), "roles": roles,
-        "is_superuser": user.is_superuser,
-        "permissions": {res: sorted(a for a in ("read", "create", "update", "delete")
-                                    if _can(user, res, a))
-                        for res in MATRIX}}
-
-
-def _can(user, res, act):
-    from .roles import can
-    return can(user, res, act)
+_user_payload = user_payload
 
 
 # -------------------------------------------------------------- dashboard

@@ -1,12 +1,30 @@
 const BASE = (import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api').replace(/\/$/, '');
-const KEY = 'sahms_token';
+const ACCESS = 'sahms_access';
+const REFRESH = 'sahms_refresh';
 
 export const API_BASE = BASE;
 
+// "Remember me" keeps the session in localStorage; otherwise it lives only until the tab closes.
+const stores = () => { try { return [sessionStorage, localStorage]; } catch { return []; } };
+const read = (k) => { for (const st of stores()) { try { const v = st.getItem(k); if (v) return v; } catch { /* blocked */ } } return null; };
+
 export const tokenStore = {
-  get() { try { return sessionStorage.getItem(KEY); } catch { return null; } },
-  set(t) { try { sessionStorage.setItem(KEY, t); } catch { /* storage blocked */ } },
-  clear() { try { sessionStorage.removeItem(KEY); } catch { /* storage blocked */ } },
+  /** The JWT access token (or null). */
+  get() { return read(ACCESS); },
+  getRefresh() { return read(REFRESH); },
+  /** Save an {access, refresh} pair. `remember` = keep it across browser restarts. */
+  setPair({ access, refresh }, remember = false) {
+    this.clear();
+    try {
+      const st = remember ? localStorage : sessionStorage;
+      st.setItem(ACCESS, access);
+      if (refresh) st.setItem(REFRESH, refresh);
+    } catch { /* storage blocked */ }
+  },
+  setAccess(access) {
+    for (const st of stores()) { try { if (st.getItem(ACCESS)) st.setItem(ACCESS, access); } catch { /* blocked */ } }
+  },
+  clear() { for (const st of stores()) { try { st.removeItem(ACCESS); st.removeItem(REFRESH); } catch { /* blocked */ } } },
 };
 
 export class ApiError extends Error {
@@ -34,7 +52,25 @@ export async function diagnose() {
   }
 }
 
-export async function api(path, options = {}) {
+let refreshing = null; // one refresh at a time, shared by parallel requests
+
+/** Trade the refresh token for a new access token. Returns true when it worked. */
+async function refreshAccess() {
+  const refresh = tokenStore.getRefresh();
+  if (!refresh) return false;
+  refreshing ??= fetch(`${BASE}/auth/token/refresh/`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ refresh }),
+  }).then(async (r) => {
+    if (!r.ok) return false;
+    const d = await r.json().catch(() => null);
+    if (!d?.access) return false;
+    tokenStore.setAccess(d.access);
+    return true;
+  }).catch(() => false).finally(() => { refreshing = null; });
+  return refreshing;
+}
+
+export async function api(path, options = {}, retried = false) {
   const token = tokenStore.get();
   let res;
   try {
@@ -42,11 +78,14 @@ export async function api(path, options = {}) {
       ...options,
       headers: {
         'Content-Type': 'application/json',
-        ...(token ? { Authorization: `Token ${token}` } : {}),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
     });
   } catch {
     throw new ApiError(0, await diagnose());
+  }
+  if (res.status === 401 && token && !retried && !path.startsWith('/auth/token') && await refreshAccess()) {
+    return api(path, options, true);
   }
   if (res.status === 204) return null;
   const data = await res.json().catch(() => null);

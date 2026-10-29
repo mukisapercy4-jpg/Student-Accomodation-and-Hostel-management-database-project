@@ -45,6 +45,7 @@ INSTALLED_APPS = [
     # Existing SAHMS application
     "backend",
     "audittrail",
+    "accounts",
 
     # REST API and CORS support
     "rest_framework",
@@ -148,6 +149,7 @@ if DEBUG:
 # ---------------------------------------------------------------------------
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
         "rest_framework.authentication.TokenAuthentication",
     ],
     "DEFAULT_PERMISSION_CLASSES": [
@@ -158,6 +160,19 @@ REST_FRAMEWORK = {
     "EXCEPTION_HANDLER": "backend.exceptions.api_exception_handler",
     "DEFAULT_THROTTLE_RATES": {"login": "10/min"},
 }
+
+from datetime import timedelta  # noqa: E402
+
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=30),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=1),
+    "UPDATE_LAST_LOGIN": True,
+    "AUTH_HEADER_TYPES": ("Bearer",),
+}
+
+# Mobile Money has no real gateway behind it. The confirm endpoint that settles a
+# simulated payment on behalf of a student only works while this is True.
+MOMO_SIMULATE = os.environ.get("MOMO_SIMULATE", str(DEBUG)).lower() == "true"
 
 # ---------------------------------------------------------------------------
 # Business configuration
