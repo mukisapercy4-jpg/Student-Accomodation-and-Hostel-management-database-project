@@ -110,40 +110,26 @@ class LockingTests(SAHMSTestCase):
         self.assertEqual(calls[:2], ["Student", "Room"])
 
 
-class MaleOnlyTests(SAHMSTestCase):
-    """Every hostel is male-only; gender is free text in MySQL, so the API enforces it."""
+class AllGendersTests(SAHMSTestCase):
+    """Hostels accept students of every gender; gender never blocks a booking."""
 
-    def test_non_male_and_blank_rejected_for_any_status(self):
-        f = self.student("F1", gender="Female")
-        n = self.student("N1", gender=None)
-        for st in (f, n):
+    def test_any_gender_or_blank_can_book_pending_or_active(self):
+        genders = ["Male", "Female", "F", "Other", None]
+        for i, g in enumerate(genders):
+            st = self.student(f"G{i}", gender=g)
+            room = self.room.__class__.objects.create(
+                hostel=self.hostel, room_number=f"G{i}", capacity=1, price_per_semester=1)
             for status in ("Pending", "Active"):
-                r = self.post_booking(st, status=status)
-                self.assertEqual(r.status_code, 400, (st.gender, status))
-                self.assertIn("male students only", str(r.data["student"]))
+                r = self.post_booking(st, room=room, status=status)
+                self.assertEqual(r.status_code, 201, (g, status, r.data))
+                self.client.post(f"/api/bookings/{r.data['booking_id']}/cancel/")
 
-    def test_male_values_case_and_space_insensitive(self):
-        for i, g in enumerate(["Male", "male", " MALE ", "M", "m"]):
-            st = self.student(f"M{i}", gender=g)
-            self.assertEqual(self.post_booking(st, status="Pending").status_code, 201, g)
-
-    def test_can_be_switched_off_deliberately(self):
-        from django.test import override_settings
+    def test_activation_and_gender_edit_are_not_restricted(self):
         f = self.student("F1", gender="Female")
-        with override_settings(MALE_ONLY_ENFORCED=False):
-            self.assertEqual(self.post_booking(f).status_code, 201)
-
-    def test_activation_rechecks_gender(self):
-        f = self.student("F1", gender="Female")
-        b = self.booking(f, status="Pending")  # legacy row created outside the API
+        b = self.booking(f, status="Pending")
         r = self.client.patch(f"/api/bookings/{b.pk}/", {"status": "Active"}, format="json")
-        self.assertEqual(r.status_code, 400)
-
-    def test_gender_cannot_be_changed_away_while_booked(self):
-        self.booking(self.s1, status="Pending")
-        r = self.client.patch(f"/api/students/{self.s1.pk}/", {"gender": "Female"}, format="json")
-        self.assertEqual(r.status_code, 400)
-        r = self.client.patch(f"/api/students/{self.s2.pk}/", {"gender": "Female"}, format="json")
+        self.assertEqual(r.status_code, 200)
+        r = self.client.patch(f"/api/students/{f.pk}/", {"gender": "Male"}, format="json")
         self.assertEqual(r.status_code, 200)
 
     def test_check_student_gender_command_is_read_only_report(self):
@@ -157,6 +143,6 @@ class MaleOnlyTests(SAHMSTestCase):
         call_command("check_student_gender", stdout=out)
         text = out.getvalue()
         self.assertIn("'Female'", text)
-        self.assertIn("NOT accepted", text)
-        self.assertIn("2 student(s) would be rejected", text)
+        self.assertIn("None", text)
+        self.assertNotIn("NOT accepted", text)
         self.assertEqual(before, list(Student.objects.values_list("pk", "gender")))

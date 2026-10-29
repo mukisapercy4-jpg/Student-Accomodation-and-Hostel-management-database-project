@@ -162,11 +162,7 @@ REST_FRAMEWORK = {
 # ---------------------------------------------------------------------------
 # Business configuration
 # ---------------------------------------------------------------------------
-# Project requirement: every hostel accommodates male students only.
-# student.gender is free text in MySQL, so the rule is enforced in the API
-# (accepted values: "Male" / "M", case-insensitive; empty is rejected).
-# Set MALE_ONLY_ENFORCED=False in .env only to switch it off deliberately.
-MALE_ONLY_ENFORCED = _env_bool("MALE_ONLY_ENFORCED", True)
+# Hostels accept students of every gender; there is no gender rule.
 
 # Django may never create/alter/drop the eight business tables (see db_router.py).
 DATABASE_ROUTERS = ["SAHMS.db_router.ProtectBusinessTablesRouter"]

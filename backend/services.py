@@ -11,7 +11,6 @@ order, student then room, so two requests cannot deadlock on each other).
 """
 from decimal import Decimal
 
-from django.conf import settings
 from django.db import transaction
 from django.db.models import Sum
 from rest_framework import serializers
@@ -67,26 +66,7 @@ def _peak_occupancy(existing, start, end):
 
 
 # ----------------------------------------------------------------- bookings
-MALE_VALUES = {"male", "m"}
-
-
-def is_male(gender):
-    return (gender or "").strip().casefold() in MALE_VALUES
-
-
-def _male_only_check(student, room):
-    """All SAHMS hostels accommodate male students only (project requirement).
-
-    student.gender is free text and nullable in MySQL (no CHECK constraint), so
-    the rule lives here. An empty or unrecognised value cannot be confirmed as
-    male and is rejected. Switch off with MALE_ONLY_ENFORCED=False in .env.
-    """
-    if not settings.MALE_ONLY_ENFORCED:
-        return
-    if not is_male(student.gender):
-        raise _err("student",
-                   f"{room.hostel.name} accommodates male students only; this student's "
-                   f"gender is recorded as {student.gender!r}.")
+# Hostels accept students of every gender: there is no gender rule on bookings.
 
 
 def _check_active_rules(student, room, start, end, exclude_id=None):
@@ -116,7 +96,6 @@ def _lock(student_id, room_id):
 def create_booking(save, data):
     status = data.get("status", "Pending")
     student, room = _lock(data["student"].pk, data["room"].pk)
-    _male_only_check(student, room)
     if status == ACTIVE:
         _check_active_rules(student, room, data["start_date"], data["end_date"])
     return save()
@@ -130,8 +109,6 @@ def update_booking(save, instance, data):
     instance = Booking.objects.select_for_update().get(pk=instance.pk)
     start = data.get("start_date", instance.start_date)
     end = data.get("end_date", instance.end_date)
-    if "room" in data or (new_status == ACTIVE and instance.status != ACTIVE):
-        _male_only_check(student, room)
     if new_status == ACTIVE:
         _check_active_rules(student, room, start, end, exclude_id=instance.pk)
     return save()

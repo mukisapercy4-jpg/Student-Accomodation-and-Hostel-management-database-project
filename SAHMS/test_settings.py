@@ -3,7 +3,6 @@ import os
 
 # Must be set before importing the real settings (which require a key).
 os.environ.setdefault("DJANGO_SECRET_KEY", "test-only-secret-key")
-os.environ["MALE_ONLY_ENFORCED"] = "True"
 
 from .settings import *  # noqa: E402,F401,F403
 

@@ -1,7 +1,7 @@
 # SAHMS: Student Accommodation and Hostel Management System
 
 Database course project. Django REST backend on the existing MySQL schema, React (Vite) frontend.
-Hostels accommodate male students only (project requirement, enforced in the API).
+Hostels accept students of every gender.
 
 ## Layout
 ```
@@ -29,7 +29,6 @@ sql/        Early PostgreSQL draft (obsolete; the live MySQL schema is the sourc
 | `.env` | `DB_NAME/USER/PASSWORD/HOST/PORT` | MySQL connection |
 | `.env` | `DJANGO_SECRET_KEY`, `DJANGO_DEBUG` | Django security |
 | `.env` | `ALLOWED_HOSTS`, `CORS_ALLOWED_ORIGINS` | Deployment (comma-separated); local defaults built in |
-| `.env` | `MALE_ONLY_ENFORCED` | Male-only booking rule (default True) |
 | `frontend/.env` | `VITE_API_BASE_URL` | API address (default http://127.0.0.1:8000/api) |
 
 ## Roles
@@ -40,7 +39,7 @@ buttons the signed-in role may use; the API enforces the same matrix (`backend/r
 Dashboard (occupancy, outstanding balance, pending payments, payments needing review) and tables with search,
 paging, details drawer and CSV export for Students, Hostels, Rooms, Bookings, Payments, Maintenance, Visitors, Staff.
 Forms: create/edit student, create booking, cancel booking, record payment, mark payment Completed/Failed/Refunded,
-create/edit maintenance request, log/edit visitor. Server validation messages (capacity, overlap, male-only, status
+create/edit maintenance request, log/edit visitor. Server validation messages (capacity, overlap, status
 rules) are shown in the form. Bookings and payments are never deleted.
 
 ## Not yet verified
