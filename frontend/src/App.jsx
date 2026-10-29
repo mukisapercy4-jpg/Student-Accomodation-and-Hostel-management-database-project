@@ -6,6 +6,12 @@ import {
 import './App.css';
 import { api, ApiError, fetchAll, money, toCsv, tokenStore } from './api.js';
 import { FORMS, RecordForm } from './forms.jsx';
+import ErrorBoundary from './components/ErrorBoundary.jsx';
+import Login from './components/Login.jsx';
+import MobileChrome from './components/MobileChrome.jsx';
+import MoMoCheckoutModal from './components/MoMoCheckoutModal.jsx';
+import RoomsGrid from './components/RoomsGrid.jsx';
+import StudentDashboard from './components/StudentDashboard.jsx';
 
 const NAV = [
   ['Dashboard', LayoutDashboard, null],
@@ -30,54 +36,6 @@ const COLUMNS = {
   visitors: [['visitor_name', 'Visitor'], ['student_name', 'Visiting'], ['room_label', 'Room'], ['visit_date', 'Date'], ['check_in_time', 'In'], ['check_out_time', 'Out'], ['purpose', 'Purpose']],
 };
 const MONEY_FIELDS = new Set(['agreed_price', 'amount', 'price_per_semester']);
-
-const LOGIN_ROLES = [
-  ['Admin', 'Full access, audit trail, history'],
-  ['Warden', 'Bookings, payments, students, rooms'],
-  ['Caretaker', 'Maintenance and visitors'],
-  ['ReadOnly', 'View records only'],
-];
-
-function Login({ onLogin }) {
-  const [role, setRole] = useState('');
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const [busy, setBusy] = useState(false);
-
-  const submit = async (e) => {
-    e.preventDefault();
-    setBusy(true); setError('');
-    try {
-      const data = await api('/auth/login/', { method: 'POST', body: JSON.stringify({ username, password, role }) });
-      tokenStore.set(data.token);
-      onLogin(data);
-    } catch (err) { setError(err.message); } finally { setBusy(false); }
-  };
-
-  return (
-    <div className="loginwrap">
-      <form className="loginbox" onSubmit={submit}>
-        <h1>SAHMS</h1>
-        <p>Choose your role, then sign in with your own username and password</p>
-        <div className="rolepick" role="radiogroup" aria-label="Role">
-          {LOGIN_ROLES.map(([name, note]) => (
-            <button type="button" key={name} role="radio" aria-checked={role === name}
-              className={role === name ? 'rolecard on' : 'rolecard'} onClick={() => setRole(name)}>
-              <strong>{name}</strong><small>{note}</small>
-            </button>
-          ))}
-        </div>
-        <input placeholder="Username" value={username} onChange={(e) => setUsername(e.target.value)} />
-        <input placeholder="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
-        {error && <div className="formerror">{error}</div>}
-        <button className="primary" disabled={busy || !role || !username || !password}>
-          {busy ? 'Signing in…' : role ? `Sign in as ${role}` : 'Select a role first'}
-        </button>
-      </form>
-    </div>
-  );
-}
 
 function Stat({ icon: Icon, title, value, note, tone }) {
   return (
@@ -219,7 +177,9 @@ function ModuleTable({ resource, q, name, me }) {
   const [tick, setTick] = useState(0);
   const [form, setForm] = useState(null); // {record?}
   const [flash, setFlash] = useState('');
+  const [momoFor, setMomoFor] = useState(null); // booking being paid with Mobile Money
   const perms = me.permissions[resource] || [];
+  const canPay = (me.permissions.payments || []).includes('create');
   const canCreate = perms.includes('create') && !!FORMS[resource];
   const canUpdate = perms.includes('update');
   const isAdmin = me.roles.includes('Admin');
@@ -260,7 +220,14 @@ function ModuleTable({ resource, q, name, me }) {
   const rowActions = (r) => {
     if (!canUpdate) return null;
     if (resource === 'bookings' && ['Pending', 'Active'].includes(r.status)) {
-      return <button className="linkbtn danger" onClick={() => window.confirm(`Cancel booking #${r.booking_id} for ${r.student_name}?`) && act(`/bookings/${r.booking_id}/cancel/`, null, 'Booking cancelled.')}>Cancel</button>;
+      return (
+        <>
+          {r.status === 'Pending' && <button className="linkbtn" onClick={() => window.confirm(`Approve booking #${r.booking_id} for ${r.student_name}?`) && act(`/bookings/${r.booking_id}/approve/`, null, 'Booking approved.')}>Approve</button>}
+          {r.status === 'Pending' && <button className="linkbtn danger" onClick={() => { const reason = window.prompt(`Reject booking #${r.booking_id}? Reason (optional):`); if (reason !== null) act(`/bookings/${r.booking_id}/reject/`, { reason }, 'Booking rejected.'); }}>Reject</button>}
+          {canPay && <button className="linkbtn" onClick={() => setMomoFor(r)}>Pay (MoMo)</button>}
+          <button className="linkbtn danger" onClick={() => window.confirm(`Cancel booking #${r.booking_id} for ${r.student_name}?`) && act(`/bookings/${r.booking_id}/cancel/`, null, 'Booking cancelled.')}>Cancel</button>
+        </>
+      );
     }
     if (resource === 'payments') {
       const next = { Pending: ['Completed', 'Failed'], Completed: ['Refunded'] }[r.payment_status] || [];
@@ -306,9 +273,16 @@ function ModuleTable({ resource, q, name, me }) {
       </div>
       {form && <RecordForm resource={resource} record={form.record} isAdmin={isAdmin} onClose={() => setForm(null)} onSaved={(m) => { setForm(null); setFlash(m); setTick((t) => t + 1); }} />}
       {selected && <Details record={selected} onClose={() => setSelected(null)} />}
+      {momoFor && <MoMoCheckoutModal booking={momoFor} onClose={() => { setMomoFor(null); setTick((t) => t + 1); }} onSettled={(m) => setFlash(m)} />}
     </section>
   );
 }
+
+// The API says where each role lands (/student|manager|admin|staff/dashboard). There is no router
+// library: the address bar is updated, and the role decides which screen renders (a student gets the
+// student portal, everyone else the management app). A static host needs an SPA fallback (serve
+// index.html for unknown paths) for a reload on that URL.
+const goHome = (m) => { if (m?.home) window.history.replaceState(null, '', m.home); };
 
 export default function App() {
   const [me, setMe] = useState(null);
@@ -316,12 +290,13 @@ export default function App() {
   const [active, setActive] = useState('Dashboard');
   const [q, setQ] = useState('');
   const [dash, setDash] = useState({ loading: false, data: null, error: '' });
+  const [roomView, setRoomView] = useState('cards'); // cards | table
 
-  const logout = useCallback(() => { tokenStore.clear(); setMe(null); setDash({ loading: false, data: null, error: '' }); }, []);
+  const logout = useCallback(() => { tokenStore.clear(); setMe(null); window.history.replaceState(null, '', '/'); setDash({ loading: false, data: null, error: '' }); }, []);
 
   useEffect(() => {
     if (!tokenStore.get()) return;
-    api('/auth/me/').then(setMe).catch(() => tokenStore.clear()).finally(() => setChecking(false));
+    api('/auth/me/').then((m) => { setMe(m); goHome(m); }).catch(() => tokenStore.clear()).finally(() => setChecking(false));
   }, []);
 
   useEffect(() => {
@@ -333,14 +308,26 @@ export default function App() {
   }, [me, active, logout]);
 
   if (checking) return <div className="loginwrap"><p>Loading…</p></div>;
-  if (!me) return <Login onLogin={setMe} />;
+  if (me?.role === 'STUDENT') {
+    return (
+      <ErrorBoundary title="The student portal hit an unexpected error.">
+        <StudentDashboard me={me} onLogout={() => api('/auth/logout/', { method: 'POST' }).catch(() => null).finally(logout)} />
+      </ErrorBoundary>
+    );
+  }
+  if (!me) return <Login onLogin={(d) => { setMe(d); setActive('Dashboard'); goHome(d); }} />;
 
   const can = (res) => (me.permissions[res] || []).includes('read');
   const nav = NAV.filter(([, , res]) => res === null || can(res));
   const resource = NAV.find(([n]) => n === active)?.[2];
+  const roomCards = active === 'Rooms' && roomView === 'cards';
 
   return (
     <div className="layout">
+      <MobileChrome title={active} nav={nav} active={active} onSelect={(n) => { setActive(n); setQ(''); }}
+        username={me.username} roleLabel={me.is_superuser ? 'Superuser' : (me.roles.join(', ') || 'No role')}
+        onLogout={() => api('/auth/logout/', { method: 'POST' }).catch(() => null).finally(logout)}
+        searchable={!!resource} q={q} onSearch={setQ} />
       <aside className="sidebar">
         <div className="brand"><span><Building2 size={23} /></span><div><b>SAHMS</b><small>HOSTEL MANAGEMENT</small></div></div>
         <p className="label">WORKSPACE</p>
@@ -349,7 +336,7 @@ export default function App() {
         ))}</nav>
         <div className="sidebarfoot">
           <div className="admin"><span>{me.username.slice(0, 2).toUpperCase()}</span><div><b>{me.username}</b><small>{me.is_superuser ? 'Superuser' : (me.roles.join(', ') || 'No role')}</small></div>
-            <button className="iconbtn" title="Sign out" onClick={() => api('/auth/logout/', { method: 'POST' }).finally(logout)}><LogOut size={16} /></button></div>
+            <button className="iconbtn" title="Sign out" onClick={() => api('/auth/logout/', { method: 'POST' }).catch(() => null).finally(logout)}><LogOut size={16} /></button></div>
         </div>
       </aside>
       <main>
@@ -362,7 +349,16 @@ export default function App() {
           {active === 'Dashboard' && dash.loading && !dash.data && <p>Loading dashboard…</p>}
           {active === 'Dashboard' && dash.error && <div className="notice">Could not load the dashboard: {dash.error}</div>}
           {active === 'Dashboard' && dash.data && <Dashboard data={dash.data} can={can} />}
-          {resource && <ModuleTable key={resource} resource={resource} q={q} name={active} me={me} />}
+          <ErrorBoundary resetKey={`${active}-${roomView}`}>
+            {active === 'Rooms' && (
+              <div className="roomview" role="group" aria-label="Rooms view">
+                <button type="button" aria-pressed={roomView === 'cards'} className={roomView === 'cards' ? 'on' : ''} onClick={() => setRoomView('cards')}>Cards</button>
+                <button type="button" aria-pressed={roomView === 'table'} className={roomView === 'table' ? 'on' : ''} onClick={() => setRoomView('table')}>Table</button>
+              </div>
+            )}
+            {roomCards && <RoomsGrid q={q} />}
+            {resource && !roomCards && <ModuleTable key={resource} resource={resource} q={q} name={active} me={me} />}
+          </ErrorBoundary>
         </div>
       </main>
     </div>

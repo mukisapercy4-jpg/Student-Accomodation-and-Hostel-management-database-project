@@ -9,13 +9,16 @@ Every check that can race runs inside transaction.atomic() after locking the
 student and room rows with SELECT ... FOR UPDATE (locks are taken in a fixed
 order, student then room, so two requests cannot deadlock on each other).
 """
+import re
+import uuid
+from datetime import date
 from decimal import Decimal
 
 from django.db import transaction
 from django.db.models import Sum
 from rest_framework import serializers
 
-from .models import Booking, Payment, Room, Student
+from .models import Booking, MaintenanceRequest, Payment, Room, Student
 
 ACTIVE = "Active"
 COMPLETED = "Completed"
@@ -204,3 +207,155 @@ def outstanding_balance():
         .values_list("agreed_price", "paid")
     )
     return sum((max(price - (paid or ZERO), ZERO) for price, paid in rows), ZERO)
+
+
+# ------------------------------------------------------------- room status
+# The room table has no status column (schema is frozen), so the status shown on
+# room cards is derived: Maintenance > Occupied > Available.
+# ASSUMPTION (confirm): only High/Urgent open maintenance blocks a room; a Low or
+# Medium request (a dripping tap) does not take the room out of service.
+MAINTENANCE_BLOCKING_PRIORITIES = ("High", "Urgent")
+MAINTENANCE_OPEN_STATUSES = ("Pending", "In Progress")
+
+ROOM_AVAILABLE = "Available"
+ROOM_OCCUPIED = "Occupied"
+ROOM_MAINTENANCE = "Maintenance"
+
+
+def blocking_maintenance_exists(room):
+    return MaintenanceRequest.objects.filter(
+        room=room, status__in=MAINTENANCE_OPEN_STATUSES,
+        priority__in=MAINTENANCE_BLOCKING_PRIORITIES).exists()
+
+
+def room_status(room, occupied=None, blocked=None):
+    """Derived card status. Pass annotated values to avoid extra queries."""
+    if blocked is None:
+        blocked = blocking_maintenance_exists(room)
+    if blocked:
+        return ROOM_MAINTENANCE
+    if occupied is None:
+        occupied = Booking.objects.filter(room=room, status=ACTIVE).count()
+    return ROOM_OCCUPIED if occupied >= room.capacity else ROOM_AVAILABLE
+
+
+def free_spaces_in_window(room, start, end):
+    """Spaces still free for the whole of [start, end] (Active bookings only)."""
+    others = list(_overlapping_active(Booking.objects.filter(room=room), start, end))
+    peak = _peak_occupancy(others, start, end) if others else 0
+    return max(room.capacity - peak, 0)
+
+
+# ---------------------------------------------------- booking approval flow
+@transaction.atomic
+def approve_booking(booking):
+    """Pending -> Active, with the same capacity/overlap rules as creating an Active booking."""
+    student, room = _lock(booking.student_id, booking.room_id)
+    booking = Booking.objects.select_for_update().get(pk=booking.pk)
+    if ACTIVE not in BOOKING_TRANSITIONS[booking.status]:
+        raise _err("status", f"A {booking.status} booking cannot be approved.")
+    if booking.status != "Pending":
+        raise _err("status", "Only a Pending booking can be approved.")
+    _check_active_rules(student, room, booking.start_date, booking.end_date,
+                        exclude_id=booking.pk)
+    booking.status = ACTIVE
+    booking.save(update_fields=["status"])
+    return booking
+
+
+@transaction.atomic
+def reject_booking(booking):
+    """Pending -> Cancelled. Active bookings go through cancel_booking instead."""
+    current = Booking.objects.select_for_update().get(pk=booking.pk)
+    if current.status != "Pending":
+        raise _err("status", "Only a Pending booking can be rejected.")
+    return cancel_booking(current)[0]
+
+
+@transaction.atomic
+def reassign_room(booking, new_room):
+    """Move a Pending/Active booking to another room. Returns (booking, old_room_id).
+
+    The agreed price is NOT changed: it is what the student agreed to pay.
+    """
+    student, room = _lock(booking.student_id, new_room.pk)
+    booking = Booking.objects.select_for_update().get(pk=booking.pk)
+    if booking.status not in ("Pending", ACTIVE):
+        raise _err("status", f"A {booking.status} booking cannot be moved to another room.")
+    if booking.room_id == room.pk:
+        raise _err("room", "The booking is already in this room.")
+    if blocking_maintenance_exists(room):
+        raise _err("room", f"Room {room.room_number} is under maintenance.")
+    if booking.status == ACTIVE:
+        _check_active_rules(student, room, booking.start_date, booking.end_date,
+                            exclude_id=booking.pk)
+    old_room_id = booking.room_id
+    booking.room = room
+    booking.save(update_fields=["room"])
+    return booking, old_room_id
+
+
+# ------------------------------------------------------ mobile money (MoMo)
+# SIMULATED: no real MTN/Airtel gateway is called. initiate_momo_payment only
+# records a Pending payment; the outcome is applied afterwards with the existing
+# Pending -> Completed / Failed payment transition (PATCH /payments/<id>/).
+# The phone number is validated and then discarded: it is never stored or logged.
+MOMO_PREFIXES = {
+    "MTN": ("077", "078", "076", "039"),
+    "Airtel": ("070", "075", "074"),
+}
+
+
+def normalize_msisdn(raw):
+    """Accept 07XXXXXXXX, 2567XXXXXXXX or +2567XXXXXXXX; return 07XXXXXXXX or raise."""
+    digits = re.sub(r"[\s\-()]", "", str(raw or ""))
+    if digits.startswith("+"):
+        digits = digits[1:]
+    if digits.startswith("256") and len(digits) == 12:
+        digits = "0" + digits[3:]
+    if not re.fullmatch(r"0\d{9}", digits):
+        raise _err("phone", "Enter a valid Ugandan mobile number, e.g. 0772123456.")
+    return digits
+
+
+def detect_momo_network(msisdn):
+    for network, prefixes in MOMO_PREFIXES.items():
+        if msisdn.startswith(prefixes):
+            return network
+    return None
+
+
+@transaction.atomic
+def initiate_momo_payment(booking, amount, phone, network):
+    """Validate and record a Pending Mobile Money payment. Returns (payment, masked_phone)."""
+    msisdn = normalize_msisdn(phone)
+    detected = detect_momo_network(msisdn)
+    if detected is None:
+        raise _err("phone", "This number is not an MTN or Airtel Uganda mobile number.")
+    if detected != network:
+        raise _err("network", f"This number belongs to {detected}, not {network}.")
+    booking = Booking.objects.select_for_update().get(pk=booking.pk)
+    if booking.status == CANCELLED:
+        raise _err("booking", "Payments cannot be added to a Cancelled booking.")
+    payment = Payment.objects.create(
+        booking=booking, amount=amount, payment_method="Mobile Money",
+        payment_status="Pending",
+        reference_number=f"MOMO-{network.upper()}-{uuid.uuid4().hex[:12].upper()}",
+        payment_date=date.today())
+    return payment, f"{msisdn[:4]}***{msisdn[-3:]}"
+
+
+@transaction.atomic
+def settle_momo_payment(payment, new_status):
+    """Pending -> Completed/Failed for a Mobile Money payment (the simulated gateway callback)."""
+    booking = Booking.objects.select_for_update().get(pk=payment.booking_id)
+    payment = Payment.objects.select_for_update().get(pk=payment.pk)
+    if payment.payment_method != "Mobile Money" or not (payment.reference_number or "").startswith("MOMO-"):
+        raise _err("payment_method", "Only a Mobile Money payment can be confirmed this way.")
+    if payment.payment_status != "Pending":
+        raise _err("payment_status", f"A {payment.payment_status} payment can no longer be confirmed.")
+    if new_status == COMPLETED and booking.status == CANCELLED:
+        raise _err("booking", "A payment on a Cancelled booking cannot be completed.")
+    payment.payment_status = new_status
+    payment.save(update_fields=["payment_status"])
+    return payment

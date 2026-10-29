@@ -41,3 +41,12 @@
 .rolecard strong{font-size:13px}
 .rolecard small{font-size:11px;color:#667085}
 .rolecard.on{border-color:#3b5bdb;background:#edf2ff;box-shadow:0 0 0 1px #3b5bdb}
+
+/* --- room cards/table toggle, mobile chrome spacing --- */
+.roomview{display:inline-flex;margin:0 0 14px;border:1px solid #e4e9f1;border-radius:8px;overflow:hidden;background:#fff}
+.roomview button{border:0;background:transparent;padding:7px 14px;font-size:11px;font-weight:700;color:#647087}
+.roomview button.on{background:#315eea;color:#fff}
+@media(max-width:900px){
+  main>header{display:none}              /* replaced by the sticky bar in MobileChrome */
+  .content{padding-bottom:calc(88px + env(safe-area-inset-bottom))}
+}

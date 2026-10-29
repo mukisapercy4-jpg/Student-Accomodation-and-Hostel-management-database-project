@@ -1,13 +1,16 @@
 from datetime import date
+from decimal import Decimal
 
 from rest_framework import serializers
+from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.validators import UniqueValidator
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
 from . import services
 from .models import (
     Booking, Hostel, MaintenanceRequest, Payment, Room, Staff, Student, Visitor,
 )
-from .roles import is_admin
+from .roles import is_admin, role_code, user_payload
 
 
 class StaffSerializer(serializers.ModelSerializer):
@@ -67,11 +70,28 @@ class HostelSerializer(serializers.ModelSerializer):
 class RoomSerializer(serializers.ModelSerializer):
     hostel_name = serializers.CharField(source="hostel.name", read_only=True)
     occupied_spaces = serializers.IntegerField(read_only=True, default=0)
+    # Derived, read-only: the room table has no status column (see services.room_status).
+    status = serializers.SerializerMethodField()
+    available_spaces = serializers.SerializerMethodField()
 
     class Meta:
         model = Room
         fields = ["room_id", "hostel", "hostel_name", "room_number", "capacity",
-                  "price_per_semester", "occupied_spaces"]
+                  "price_per_semester", "occupied_spaces", "available_spaces", "status"]
+
+    def _occupied(self, obj):
+        occ = getattr(obj, "occupied_spaces", None)
+        if occ is None:
+            occ = Booking.objects.filter(room=obj, status="Active").count()
+        return occ
+
+    def get_available_spaces(self, obj):
+        return max(obj.capacity - self._occupied(obj), 0)
+
+    def get_status(self, obj):
+        return services.room_status(
+            obj, occupied=self._occupied(obj),
+            blocked=getattr(obj, "has_blocking_maintenance", None))
 
     def validate(self, attrs):
         hostel = attrs.get("hostel") or (self.instance.hostel if self.instance else None)
@@ -298,11 +318,16 @@ from audittrail.models import AuditEvent, BookingStatusHistory, PaymentStatusHis
 
 class AuditEventSerializer(serializers.ModelSerializer):
     actor_username = serializers.CharField(source="actor.username", read_only=True, default=None)
+    # Spec-friendly aliases of the stored columns: who / what / which table / when.
+    user_id = serializers.IntegerField(source="actor_id", read_only=True)
+    action_type = serializers.CharField(source="action", read_only=True)
+    table_name = serializers.CharField(source="resource", read_only=True)
 
     class Meta:
         model = AuditEvent
-        fields = ["id", "actor", "actor_username", "action", "resource", "entity_id",
-                  "changed_fields", "description", "timestamp", "request_id"]
+        fields = ["id", "actor", "actor_username", "user_id", "action", "action_type",
+                  "resource", "table_name", "entity_id", "changed_fields", "description",
+                  "timestamp", "request_id"]
 
 
 class BookingStatusHistorySerializer(serializers.ModelSerializer):
@@ -321,3 +346,68 @@ class PaymentStatusHistorySerializer(serializers.ModelSerializer):
         model = PaymentStatusHistory
         fields = ["id", "payment_id", "old_status", "new_status", "actor",
                   "actor_username", "reason", "timestamp"]
+
+
+class ReassignRoomSerializer(serializers.Serializer):
+    room = serializers.PrimaryKeyRelatedField(queryset=Room.objects.select_related("hostel"))
+
+
+class MomoInitiateSerializer(serializers.Serializer):
+    booking = serializers.PrimaryKeyRelatedField(queryset=Booking.objects.all())
+    amount = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=Decimal("0.01"))
+    network = serializers.ChoiceField(choices=list(services.MOMO_PREFIXES))
+    phone = serializers.CharField(max_length=20, write_only=True)
+
+    def validate_phone(self, value):
+        return services.normalize_msisdn(value)
+
+
+class AvailableRoomsQuerySerializer(serializers.Serializer):
+    start_date = serializers.DateField()
+    end_date = serializers.DateField()
+    hostel = serializers.IntegerField(required=False, min_value=1)
+
+    def validate(self, attrs):
+        if attrs["end_date"] < attrs["start_date"]:
+            raise serializers.ValidationError({"end_date": "The end date cannot precede the start date."})
+        return attrs
+
+
+class RoleTokenObtainPairSerializer(TokenObtainPairSerializer):
+    """SimpleJWT login that adds the user's role to the JWT claims and to the response body."""
+
+    @classmethod
+    def get_token(cls, user):
+        token = super().get_token(user)
+        token["role"] = role_code(user)
+        token["username"] = user.get_username()
+        return token
+
+    @staticmethod
+    def resolve_identifier(raw):
+        """Username, e-mail address or student registration number -> the username to authenticate."""
+        from django.contrib.auth import get_user_model
+        from accounts.models import StudentAccount
+        raw = (raw or "").strip()
+        User = get_user_model()
+        if "@" in raw:
+            matches = list(User.objects.filter(email__iexact=raw)[:2])
+            if len(matches) == 1:
+                return matches[0].get_username()
+        student = Student.objects.filter(reg_number__iexact=raw).first()
+        if student:
+            acct = StudentAccount.objects.select_related("user").filter(student_id=student.pk).first()
+            if acct:
+                return acct.user.get_username()
+        return raw
+
+    def validate(self, attrs):
+        attrs[self.username_field] = self.resolve_identifier(attrs.get(self.username_field))
+        data = super().validate(attrs)
+        payload = user_payload(self.user)
+        if payload["role"] is None:
+            raise AuthenticationFailed("This account has no SAHMS role.")
+        if payload["role"] == "STUDENT" and not payload.get("student"):
+            raise AuthenticationFailed("This login is not linked to a student record.")
+        data.update(payload)
+        return data
