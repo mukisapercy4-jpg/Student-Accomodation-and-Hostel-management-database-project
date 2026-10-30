@@ -111,7 +111,21 @@ else:
 db_options = {"charset": "utf8mb4"}
 # Enable SSL mode if requested (required for TiDB Cloud / Aiven)
 if os.getenv("DB_SSL", "").strip().lower() in ("true", "1", "yes", "required"):
-    db_options["ssl"] = {"ssl_mode": "REQUIRED"}
+    ssl_config = {"ssl_mode": "REQUIRED"}
+    try:
+        import certifi
+        ssl_config["ca"] = certifi.where()
+    except ImportError:
+        for ca_candidate in (
+            "/etc/ssl/certs/ca-certificates.crt",
+            "/etc/pki/tls/certs/ca-bundle.crt",
+            "/etc/ssl/ca-bundle.pem",
+            "/etc/ssl/cert.pem",
+        ):
+            if os.path.exists(ca_candidate):
+                ssl_config["ca"] = ca_candidate
+                break
+    db_options["ssl"] = ssl_config
 
 DATABASES = {
     "default": {

@@ -6,3 +6,4 @@ mysqlclient>=2.2
 djangorestframework-simplejwt>=5.3
 gunicorn>=21.0
 whitenoise>=6.6
+certifi>=2024.0.0
