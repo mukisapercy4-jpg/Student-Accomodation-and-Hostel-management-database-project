@@ -35,8 +35,9 @@ MATRIX = {
     "payments":    {ADMIN: ALL, WARDEN: {R, C, U}, READ_ONLY: {R}, STUDENT: {R}},
     # Starting / confirming a (simulated) Mobile Money payment. Students may do it for their own bookings.
     "momo_payments": {ADMIN: {C}, WARDEN: {C}, STUDENT: {C}},
-    "maintenance": {ADMIN: ALL, WARDEN: {R, C, U}, CARETAKER: {R, C, U}, READ_ONLY: {R}},
-    "visitors":    {ADMIN: ALL, WARDEN: {R, C, U}, CARETAKER: {R, C, U}, READ_ONLY: {R}},
+    # Students: read and create only, and only their own rows (student_scope + create() in views.py).
+    "maintenance": {ADMIN: ALL, WARDEN: {R, C, U}, CARETAKER: {R, C, U}, READ_ONLY: {R}, STUDENT: {R, C}},
+    "visitors":    {ADMIN: ALL, WARDEN: {R, C, U}, CARETAKER: {R, C, U}, READ_ONLY: {R}, STUDENT: {R, C}},
     "dashboard":   {ADMIN: {R}, WARDEN: {R}, CARETAKER: {R}, READ_ONLY: {R}},
     "audit_logs":  {ADMIN: {R}},
     "booking_history": {ADMIN: {R}},
@@ -108,6 +109,27 @@ def user_payload(user, signed_in_as=None):
     if code == ROLE_CODES[STUDENT]:
         from .models import Student
         st = Student.objects.filter(pk=student_id_for(user)).first()
+        # the student's own profile (national_id is deliberately left out)
         payload["student"] = ({"student_id": st.pk, "reg_number": st.reg_number,
-                               "name": f"{st.first_name} {st.last_name}"} if st else None)
+                               "name": f"{st.first_name} {st.last_name}",
+                               "first_name": st.first_name, "last_name": st.last_name,
+                               "program": st.program, "year_of_study": st.year_of_study,
+                               "email": st.email, "phone": st.phone, "gender": st.gender}
+                              if st else None)
+    elif code is not None:
+        # Display only (never used for access): the staff row whose e-mail matches this login,
+        # and the hostel that person wardens. There is no user<->staff link table in the schema.
+        payload.update(_staff_context(user))
     return payload
+
+
+def _staff_context(user):
+    from .models import Hostel, Staff
+    email = (user.email or "").strip()
+    st = Staff.objects.filter(email__iexact=email).first() if email else None
+    if st is None:
+        return {"staff": None, "hostel": None}
+    h = Hostel.objects.filter(warden=st).first()
+    return {"staff": {"staff_id": st.pk, "name": f"{st.first_name} {st.last_name}", "role": st.role,
+                      "phone": st.phone, "email": st.email},
+            "hostel": {"hostel_id": h.pk, "name": h.name} if h else None}

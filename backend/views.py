@@ -224,7 +224,8 @@ class BookingViewSet(BaseViewSet):
     ).order_by("-booking_id")
     serializer_class = BookingSerializer
     filter_params = {"status": "status", "student": "student_id", "room": "room_id",
-                     "academic_year": "academic_year", "semester": "semester"}
+                     "academic_year": "academic_year", "semester": "semester",
+                     "hostel": "room__hostel_id"}
     search_fields = ("student__reg_number", "student__first_name",
                      "student__last_name", "room__room_number")
     student_scope = "student_id"
@@ -319,7 +320,7 @@ class PaymentViewSet(BaseViewSet):
     queryset = Payment.objects.select_related("booking__student", "booking__room__hostel").order_by("-payment_id")
     serializer_class = PaymentSerializer
     filter_params = {"status": "payment_status", "booking": "booking_id",
-                     "method": "payment_method"}
+                     "method": "payment_method", "hostel": "booking__room__hostel_id"}
     search_fields = ("reference_number",)
     student_scope = "booking__student_id"
     # POST payments/momo/ and payments/<id>/momo-confirm/ are open to students for their own bookings
@@ -383,16 +384,54 @@ class MaintenanceViewSet(BaseViewSet):
     queryset = MaintenanceRequest.objects.select_related(
         "room__hostel", "reported_by_student", "assigned_to").order_by("-request_id")
     serializer_class = MaintenanceRequestSerializer
-    filter_params = {"status": "status", "priority": "priority", "room": "room_id"}
+    filter_params = {"status": "status", "priority": "priority", "room": "room_id",
+                     "hostel": "room__hostel_id"}
     search_fields = ("description",)
+    student_scope = "reported_by_student_id"
+
+    def create(self, request, *args, **kwargs):
+        """Staff create as before. A student reports a fault in a room they currently occupy:
+        the reporter comes from the login, the status starts Pending and the priority is Medium
+        (High/Urgent block a room from being booked, so only staff may raise it)."""
+        if not student_only(request.user):
+            return super().create(request, *args, **kwargs)
+        sid = student_id_for(request.user)
+        if sid is None:
+            raise PermissionDenied("This login is not linked to a student record.")
+        data = {k: request.data[k] for k in ("room", "description") if k in request.data}
+        data.update(reported_by_student=sid, status="Pending", priority="Medium")
+        serializer = self.get_serializer(data=data)
+        serializer.is_valid(raise_exception=True)
+        room = serializer.validated_data["room"]
+        if not Booking.objects.filter(student_id=sid, room=room, status="Active").exists():
+            raise ValidationError({"room": "You can only report a fault in a room you currently occupy."})
+        self.perform_create(serializer)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
 class VisitorViewSet(BaseViewSet):
     resource = "visitors"
     queryset = Visitor.objects.select_related("booking__student", "booking__room__hostel").order_by("-visitor_id")
     serializer_class = VisitorSerializer
-    filter_params = {"booking": "booking_id"}
+    filter_params = {"booking": "booking_id", "hostel": "booking__room__hostel_id",
+                     "visit_date": "visit_date"}
     search_fields = ("visitor_name",)
+    student_scope = "booking__student_id"
+
+    def create(self, request, *args, **kwargs):
+        """A student registers an expected visitor against their own booking only."""
+        if not student_only(request.user):
+            return super().create(request, *args, **kwargs)
+        sid = student_id_for(request.user)
+        if sid is None:
+            raise PermissionDenied("This login is not linked to a student record.")
+        keys = ("booking", "visitor_name", "phone", "visit_date", "check_in_time", "purpose")
+        serializer = self.get_serializer(data={k: request.data[k] for k in keys if k in request.data})
+        serializer.is_valid(raise_exception=True)
+        if serializer.validated_data["booking"].student_id != sid:
+            raise PermissionDenied("You can only register visitors for your own booking.")
+        self.perform_create(serializer)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
 class AuditEventViewSet(viewsets.ReadOnlyModelViewSet):
@@ -549,6 +588,7 @@ class DashboardView(APIView):
                 "pending_records_total": str(_money(pend.aggregate(t=Sum("amount"))["t"])),
                 "pending_records_count": pend.count(),
             }
+            data["payments"].update(services.payment_breakdown())
             flagged = services.bookings_needing_review()
             data["payments"]["review"] = {
                 "flagged_bookings_count": len(flagged),

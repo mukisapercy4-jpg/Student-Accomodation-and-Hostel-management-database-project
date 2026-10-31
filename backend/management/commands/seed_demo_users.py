@@ -14,13 +14,13 @@ from accounts.models import StudentAccount
 from backend.models import Student
 
 DEMO_PASSWORD = "demo-pass-123"
-DEMO_USERS = (("demo_manager", "Warden"), ("demo_admin", "Admin"), ("demo_readonly", "ReadOnly"),
+DEMO_USERS = (("demo_manager", "Warden"), ("demo_caretaker", "Caretaker"), ("demo_admin", "Admin"), ("demo_readonly", "ReadOnly"),
               ("demo_student", "Student"))
 DEMO_STUDENT_REG = "DEMO-0001"
 
 
 class Command(BaseCommand):
-    help = "Create/reset demo accounts (demo_manager, demo_admin, demo_readonly, demo_student). DEBUG only."
+    help = "Create/reset demo accounts (demo_manager, demo_caretaker, demo_admin, demo_readonly, demo_student). DEBUG only."
 
     def handle(self, *args, **options):
         if not settings.DEBUG:

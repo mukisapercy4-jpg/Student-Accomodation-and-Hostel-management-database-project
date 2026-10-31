@@ -209,6 +209,42 @@ def outstanding_balance():
     return sum((max(price - (paid or ZERO), ZERO) for price, paid in rows), ZERO)
 
 
+def payment_breakdown():
+    """Dashboard numbers behind the Payment Status card.
+
+    settlement: non-cancelled bookings split by how much of the agreed price is Completed.
+    channels:   Completed money per payment method.
+    agreed_total / cleared_percent: agreed price of those bookings and the share already paid.
+    """
+    from django.db.models import Q
+
+    rows = list(Booking.objects.exclude(status=CANCELLED)
+                .annotate(paid=Sum("payments__amount", filter=Q(payments__payment_status=COMPLETED)))
+                .values_list("agreed_price", "paid"))
+    full = partial = unpaid = 0
+    agreed = paid_capped = ZERO
+    for price, paid in rows:
+        paid = paid or ZERO
+        agreed += price
+        paid_capped += min(paid, price)
+        if paid <= 0:
+            unpaid += 1
+        elif paid >= price:
+            full += 1
+        else:
+            partial += 1
+    channels = {m: ZERO for m in ("Bank", "Mobile Money", "Cash")}
+    for method, total in (Payment.objects.filter(payment_status=COMPLETED)
+                          .values_list("payment_method").annotate(t=Sum("amount"))):
+        channels[method] = total or ZERO
+    return {
+        "settlement": {"fully_paid": full, "partial": partial, "unpaid": unpaid, "bookings": len(rows)},
+        "channels": {k: str(Decimal(v).quantize(Decimal("0.01"))) for k, v in channels.items()},
+        "agreed_total": str(Decimal(agreed).quantize(Decimal("0.01"))),
+        "cleared_percent": float(round(paid_capped * 100 / agreed, 1)) if agreed else 0.0,
+    }
+
+
 # ------------------------------------------------------------- room status
 # The room table has no status column (schema is frozen), so the status shown on
 # room cards is derived: Maintenance > Occupied > Available.

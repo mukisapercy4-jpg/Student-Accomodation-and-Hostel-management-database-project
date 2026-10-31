@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { X } from 'lucide-react';
 import { api, fetchAll } from './api.js';
+import { Modal, btn, fieldCls } from './ui.jsx';
 
 const SEMESTERS = [[1, 'Semester 1'], [2, 'Semester 2']];
 const strs = (a) => a.map((v) => [v, v]);
@@ -88,11 +88,11 @@ const clean = (fields, values) => {
   return out;
 };
 
-export function RecordForm({ resource, record, isAdmin, onClose, onSaved }) {
+export function RecordForm({ resource, record, preset, isAdmin, onClose, onSaved }) {
   const cfg = FORMS[resource];
   const editing = !!record;
   const fields = cfg.fields.filter((f) => (f[5] !== 'admin' || isAdmin) && (!editing || !cfg.editable || cfg.editable.includes(f[0]) || resource === 'students'));
-  const [values, setValues] = useState(() => (editing ? { ...record } : { ...(cfg.defaults || {}) }));
+  const [values, setValues] = useState(() => (editing ? { ...record } : { ...(cfg.defaults || {}), ...(preset || {}) }));
   const [options, setOptions] = useState({});
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -131,30 +131,29 @@ export function RecordForm({ resource, record, isAdmin, onClose, onSaved }) {
     } catch (err) { setError(err.message); } finally { setBusy(false); }
   };
 
+  const label = 'grid gap-1 font-label-md text-label-md text-on-surface-variant';
   return (
-    <div className="overlay" onClick={onClose}>
-      <form className="drawer formdrawer" onClick={(e) => e.stopPropagation()} onSubmit={submit}>
-        <div className="drawerhead"><h2>{editing ? 'Edit' : 'New'} {cfg.noun}</h2>
-          <button type="button" className="iconbtn" onClick={onClose} title="Close"><X size={18} /></button></div>
+    <Modal side title={`${editing ? 'Edit' : 'New'} ${cfg.noun}`} onClose={onClose}>
+      <form className="grid gap-space-md" onSubmit={submit}>
         {fields.map(([k, lbl, type, extra, req]) => (
-          <label className="field" key={k}><span>{lbl}{req ? ' *' : ''}</span>
+          <label className={label} key={k}><span>{lbl}{req ? ' *' : ''}</span>
             {type === 'select' && (
-              <select value={values[k] ?? ''} onChange={(e) => set(k, e.target.value)} required={!!req}>
+              <select className={fieldCls} value={values[k] ?? ''} onChange={(e) => set(k, e.target.value)} required={!!req}>
                 <option value="">Select…</option>{extra.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
               </select>)}
             {type === 'remote' && (
-              <select value={values[k] ?? ''} onChange={(e) => set(k, e.target.value)} required={!!req} disabled={editing && resource !== 'maintenance'}>
+              <select className={fieldCls} value={values[k] ?? ''} onChange={(e) => set(k, e.target.value)} required={!!req} disabled={editing && resource !== 'maintenance'}>
                 <option value="">{options[k] ? 'Select…' : 'Loading…'}</option>
                 {(options[k] || []).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
               </select>)}
-            {type === 'textarea' && <textarea rows={3} value={values[k] ?? ''} onChange={(e) => set(k, e.target.value)} required={!!req} />}
+            {type === 'textarea' && <textarea className={fieldCls} rows={3} value={values[k] ?? ''} onChange={(e) => set(k, e.target.value)} required={!!req} />}
             {!['select', 'remote', 'textarea'].includes(type) && (
-              <input type={type} step={type === 'number' ? 'any' : undefined} value={values[k] ?? ''} onChange={(e) => set(k, e.target.value)} required={!!req} />)}
+              <input className={fieldCls} type={type} step={type === 'number' ? 'any' : undefined} value={values[k] ?? ''} onChange={(e) => set(k, e.target.value)} required={!!req} />)}
           </label>
         ))}
-        {error && <div className="formerror">{error}</div>}
-        <button className="primary formsubmit" disabled={busy}>{busy ? 'Saving…' : 'Save'}</button>
+        {error && <p role="alert" className="rounded-lg bg-error-container p-space-sm px-space-md text-body-md text-on-error-container">{error}</p>}
+        <button className={btn.primary} disabled={busy}>{busy ? 'Saving…' : 'Save'}</button>
       </form>
-    </div>
+    </Modal>
   );
 }
