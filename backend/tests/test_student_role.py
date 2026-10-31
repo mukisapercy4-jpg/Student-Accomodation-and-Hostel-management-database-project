@@ -82,8 +82,9 @@ class StudentPermissionTests(StudentBase):
         self.login(self.stu_user)
         self.assertEqual(self.client.get("/api/rooms/").status_code, 200)
         self.assertEqual(self.client.get("/api/rooms/available/?start_date=2026-09-01&end_date=2026-12-15").status_code, 200)
-        for path in ("/api/students/", "/api/staff/", "/api/maintenance/", "/api/visitors/",
-                     "/api/audit-logs/", "/api/dashboard/"):
+        # maintenance and visitors are open to students too, but only for their own rows
+        # (see test_design_wiring.py), so they are no longer in this list.
+        for path in ("/api/students/", "/api/staff/", "/api/audit-logs/", "/api/dashboard/"):
             self.assertEqual(self.client.get(path).status_code, 403, path)
 
     def test_student_cannot_write_rooms_or_approve_or_edit(self):

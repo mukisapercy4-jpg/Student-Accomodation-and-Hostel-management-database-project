@@ -119,17 +119,17 @@ export default function MoMoCheckoutModal({ booking, onClose, onSettled }) {
     <div className="fixed inset-0 z-[60] flex items-end justify-center bg-slate-900/60 p-0 sm:items-center sm:p-4"
       onMouseDown={(e) => e.target === e.currentTarget && close()}>
       <div role="dialog" aria-modal="true" aria-labelledby="momo-title"
-        className="max-h-[92vh] w-full overflow-y-auto rounded-t-2xl bg-white p-5 shadow-2xl sm:max-w-md sm:rounded-2xl">
+        className="max-h-[92vh] w-full overflow-y-auto rounded-t-2xl bg-surface-container-lowest p-5 shadow-2xl sm:max-w-md sm:rounded-2xl">
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
-            <p id="momo-title" className="flex items-center gap-2 text-base font-extrabold text-slate-800">
+            <p id="momo-title" className="flex items-center gap-2 text-base font-extrabold text-on-surface">
               <Smartphone size={18} aria-hidden="true" /> Mobile Money checkout
             </p>
-            <p className="mt-0.5 text-xs text-slate-500">
+            <p className="mt-0.5 text-xs text-on-surface-variant">
               Booking #{booking.booking_id} · {booking.student_name} · {booking.hostel_name} {booking.room_number}
             </p>
           </div>
-          <button type="button" onClick={close} aria-label="Close" className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100"><X size={18} /></button>
+          <button type="button" onClick={close} aria-label="Close" className="rounded-lg p-1.5 text-on-surface-variant hover:bg-slate-100"><X size={18} /></button>
         </div>
 
         {SIMULATE && step !== 'success' && (
@@ -143,29 +143,29 @@ export default function MoMoCheckoutModal({ booking, onClose, onSettled }) {
             <div role="radiogroup" aria-label="Network" className="grid grid-cols-2 gap-2">
               {Object.entries(NETWORKS).map(([name, n]) => (
                 <button key={name} type="button" role="radio" aria-checked={network === name} onClick={() => setNetwork(name)}
-                  className={`flex items-center justify-center gap-2 rounded-xl border-2 px-3 py-3 text-sm font-bold ${network === name ? n.on : 'border-slate-200 text-slate-500'}`}>
+                  className={`flex items-center justify-center gap-2 rounded-xl border-2 px-3 py-3 text-sm font-bold ${network === name ? n.on : 'border-outline-variant text-on-surface-variant'}`}>
                   <span className={`h-2.5 w-2.5 rounded-full ${n.dot}`} aria-hidden="true" />{name === 'MTN' ? 'MTN MoMo' : 'Airtel Money'}
                 </button>
               ))}
             </div>
 
             <div>
-              <label htmlFor="momo-phone" className="mb-1 block text-xs font-semibold text-slate-600">Mobile money number</label>
+              <label htmlFor="momo-phone" className="mb-1 block text-xs font-semibold text-on-surface-variant">Mobile money number</label>
               <input id="momo-phone" ref={phoneRef} type="tel" inputMode="tel" autoComplete="tel" placeholder="0772 123 456"
                 value={phone} onChange={(e) => setPhone(e.target.value)} onBlur={() => setTouched(true)}
                 aria-invalid={touched && !!problem} aria-describedby="momo-phone-help"
-                className={`w-full rounded-lg border px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-300 ${touched && problem ? 'border-rose-400' : 'border-slate-300'}`} />
-              <p id="momo-phone-help" className={`mt-1 text-[11px] ${touched && problem ? 'text-rose-600' : 'text-slate-400'}`}>
+                className={`w-full rounded-lg border px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-300 ${touched && problem ? 'border-rose-400' : 'border-outline-variant'}`} />
+              <p id="momo-phone-help" className={`mt-1 text-[11px] ${touched && problem ? 'text-rose-600' : 'text-outline'}`}>
                 {touched && problem ? problem : 'The number is used for this request only and is not saved.'}
               </p>
             </div>
 
             <div>
-              <label htmlFor="momo-amount" className="mb-1 block text-xs font-semibold text-slate-600">Amount (UGX)</label>
+              <label htmlFor="momo-amount" className="mb-1 block text-xs font-semibold text-on-surface-variant">Amount (UGX)</label>
               <input id="momo-amount" type="number" inputMode="numeric" min="1" step="1" value={amount}
                 onChange={(e) => setAmount(e.target.value)}
-                className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-300" />
-              <p className="mt-1 text-[11px] text-slate-400">Balance on this booking: {money(balance)}</p>
+                className="w-full rounded-lg border border-outline-variant px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-300" />
+              <p className="mt-1 text-[11px] text-outline">Balance on this booking: {money(balance)}</p>
               {touched && !amountOk && <p className="text-[11px] text-rose-600">Enter an amount above zero.</p>}
             </div>
 
@@ -182,11 +182,11 @@ export default function MoMoCheckoutModal({ booking, onClose, onSettled }) {
           <div className="grid gap-4 text-center" role="status" aria-live="polite">
             <Loader2 size={34} className="mx-auto animate-spin text-blue-600" aria-hidden="true" />
             <div>
-              <p className="text-sm font-bold text-slate-800">Waiting for PIN authorization...</p>
-              <p className="mt-1 text-xs text-slate-500">A prompt was sent to {payment.phone_masked}. Ask the payer to approve it on their phone.</p>
+              <p className="text-sm font-bold text-on-surface">Waiting for PIN authorization...</p>
+              <p className="mt-1 text-xs text-on-surface-variant">A prompt was sent to {payment.phone_masked}. Ask the payer to approve it on their phone.</p>
             </div>
-            <div className="mx-auto w-full max-w-xs rounded-xl border border-slate-300 bg-slate-900 p-3 text-left font-mono text-[11px] leading-relaxed text-emerald-300">
-              <p className="mb-1 text-slate-400">{SIMULATE ? 'Simulated USSD prompt' : 'USSD prompt'} · {network}</p>
+            <div className="mx-auto w-full max-w-xs rounded-xl border border-outline-variant bg-slate-900 p-3 text-left font-mono text-[11px] leading-relaxed text-emerald-300">
+              <p className="mb-1 text-outline">{SIMULATE ? 'Simulated USSD prompt' : 'USSD prompt'} · {network}</p>
               <p>Pay {money(amountNum)} to SAHMS?</p>
               <p>Ref {payment.reference_number}</p>
               <p>Enter PIN to confirm.</p>
@@ -195,20 +195,20 @@ export default function MoMoCheckoutModal({ booking, onClose, onSettled }) {
             {SIMULATE && (
               <div className="grid grid-cols-2 gap-2">
                 <button type="button" disabled={busy} onClick={() => simulate('Completed')}
-                  className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-800 disabled:opacity-50">Simulate: PIN approved</button>
+                  className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-bold text-primary disabled:opacity-50">Simulate: PIN approved</button>
                 <button type="button" disabled={busy} onClick={() => simulate('Failed')}
                   className="rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-800 disabled:opacity-50">Simulate: declined</button>
               </div>
             )}
-            <p className="text-[11px] text-slate-400">The payment stays Pending until it is approved or declined.</p>
+            <p className="text-[11px] text-outline">The payment stays Pending until it is approved or declined.</p>
           </div>
         )}
 
         {step === 'success' && (
           <div className="grid gap-3 text-center" role="status">
             <CheckCircle2 size={44} className="mx-auto text-emerald-500" aria-hidden="true" />
-            <p className="text-base font-extrabold text-slate-800">Payment completed</p>
-            <p className="text-xs text-slate-500">{money(amountNum)} received · Ref {payment?.reference_number}</p>
+            <p className="text-base font-extrabold text-on-surface">Payment completed</p>
+            <p className="text-xs text-on-surface-variant">{money(amountNum)} received · Ref {payment?.reference_number}</p>
             <button type="button" onClick={onClose} className="rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white">Done</button>
           </div>
         )}
@@ -216,10 +216,10 @@ export default function MoMoCheckoutModal({ booking, onClose, onSettled }) {
         {step === 'failed' && (
           <div className="grid gap-3 text-center" role="alert">
             <XCircle size={44} className="mx-auto text-rose-500" aria-hidden="true" />
-            <p className="text-base font-extrabold text-slate-800">Payment failed</p>
-            <p className="text-xs text-slate-500">The request was declined or cancelled. It is recorded as Failed; no money was received.</p>
+            <p className="text-base font-extrabold text-on-surface">Payment failed</p>
+            <p className="text-xs text-on-surface-variant">The request was declined or cancelled. It is recorded as Failed; no money was received.</p>
             <div className="grid grid-cols-2 gap-2">
-              <button type="button" onClick={onClose} className="rounded-xl border border-slate-300 px-4 py-3 text-sm font-bold text-slate-700">Close</button>
+              <button type="button" onClick={onClose} className="rounded-xl border border-outline-variant px-4 py-3 text-sm font-bold text-on-surface">Close</button>
               <button type="button" onClick={retry} className="rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white">Try again</button>
             </div>
           </div>
@@ -228,8 +228,8 @@ export default function MoMoCheckoutModal({ booking, onClose, onSettled }) {
         {step === 'timeout' && (
           <div className="grid gap-3 text-center" role="alert">
             <Loader2 size={34} className="mx-auto text-amber-500" aria-hidden="true" />
-            <p className="text-base font-extrabold text-slate-800">Still waiting</p>
-            <p className="text-xs text-slate-500">No approval yet. The payment {payment?.reference_number} stays Pending and can be completed or failed from the Payments list.</p>
+            <p className="text-base font-extrabold text-on-surface">Still waiting</p>
+            <p className="text-xs text-on-surface-variant">No approval yet. The payment {payment?.reference_number} stays Pending and can be completed or failed from the Payments list.</p>
             <button type="button" onClick={onClose} className="rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white">Close</button>
           </div>
         )}

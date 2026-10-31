@@ -1,6 +1,131 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap');:root{font-family:'DM Sans',sans-serif;color:#263149;background:#f5f7fb;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased}*{box-sizing:border-box}body{margin:0;min-width:320px;min-height:100vh}button,input{font:inherit}button{cursor:pointer}
-/* Tailwind: theme + utilities only. Preflight (the global reset) is left out on purpose so the
-   existing App.css screens keep their look; new components use utility classes only. */
-@layer theme, base, components, utilities;
-@import "tailwindcss/theme.css" layer(theme);
-@import "tailwindcss/utilities.css" layer(utilities);
+/* SAHMS design system: tokens copied from the Stitch export (academic_living_portal/DESIGN.md).
+   Class names used by the screens (bg-surface-container-lowest, text-headline-lg, p-space-md, ...) match Stitch. */
+@import "tailwindcss";
+
+@theme {
+  --color-surface: #f8f9ff;
+  --color-surface-dim: #cbdbf5;
+  --color-surface-bright: #f8f9ff;
+  --color-surface-container-lowest: #ffffff;
+  --color-surface-container-low: #eff4ff;
+  --color-surface-container: #e5eeff;
+  --color-surface-container-high: #dce9ff;
+  --color-surface-container-highest: #d3e4fe;
+  --color-on-surface: #0b1c30;
+  --color-on-surface-variant: #464555;
+  --color-inverse-surface: #213145;
+  --color-inverse-on-surface: #eaf1ff;
+  --color-outline: #777587;
+  --color-outline-variant: #c7c4d8;
+  --color-surface-tint: #4d44e3;
+  --color-primary: #3525cd;
+  --color-on-primary: #ffffff;
+  --color-primary-container: #4f46e5;
+  --color-on-primary-container: #dad7ff;
+  --color-inverse-primary: #c3c0ff;
+  --color-secondary: #0058be;
+  --color-on-secondary: #ffffff;
+  --color-secondary-container: #2170e4;
+  --color-on-secondary-container: #fefcff;
+  --color-tertiary: #3e495d;
+  --color-on-tertiary: #ffffff;
+  --color-tertiary-container: #566175;
+  --color-on-tertiary-container: #d1dcf4;
+  --color-error: #ba1a1a;
+  --color-on-error: #ffffff;
+  --color-error-container: #ffdad6;
+  --color-on-error-container: #93000a;
+  --color-primary-fixed: #e2dfff;
+  --color-primary-fixed-dim: #c3c0ff;
+  --color-on-primary-fixed: #0f0069;
+  --color-on-primary-fixed-variant: #3323cc;
+  --color-secondary-fixed: #d8e2ff;
+  --color-secondary-fixed-dim: #adc6ff;
+  --color-on-secondary-fixed: #001a42;
+  --color-on-secondary-fixed-variant: #004395;
+  --color-tertiary-fixed: #d8e3fb;
+  --color-tertiary-fixed-dim: #bcc7de;
+  --color-on-tertiary-fixed: #111c2d;
+  --color-on-tertiary-fixed-variant: #3c475a;
+  --color-background: #f8f9ff;
+  --color-on-background: #0b1c30;
+  --color-surface-variant: #d3e4fe;
+  --color-status-available: #10B981;
+  --color-status-pending: #F59E0B;
+  --color-status-occupied: #EF4444;
+  --color-momo-mtn: #FFCC00;
+  --color-momo-mtn-accent: #D97706;
+  --color-momo-airtel: #E11D48;
+  --font-headline-xl: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --text-headline-xl: 40px;
+  --text-headline-xl--line-height: 48px;
+  --text-headline-xl--font-weight: 700;
+  --font-headline-xl-mobile: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --text-headline-xl-mobile: 30px;
+  --text-headline-xl-mobile--line-height: 38px;
+  --text-headline-xl-mobile--font-weight: 700;
+  --font-headline-lg: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --text-headline-lg: 32px;
+  --text-headline-lg--line-height: 40px;
+  --text-headline-lg--font-weight: 600;
+  --font-headline-lg-mobile: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --text-headline-lg-mobile: 26px;
+  --text-headline-lg-mobile--line-height: 34px;
+  --text-headline-lg-mobile--font-weight: 600;
+  --font-headline-md: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --text-headline-md: 24px;
+  --text-headline-md--line-height: 32px;
+  --text-headline-md--font-weight: 600;
+  --font-headline-sm: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --text-headline-sm: 20px;
+  --text-headline-sm--line-height: 28px;
+  --text-headline-sm--font-weight: 600;
+  --font-metric-display: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --text-metric-display: 36px;
+  --text-metric-display--line-height: 40px;
+  --text-metric-display--font-weight: 800;
+  --text-metric-display--letter-spacing: -0.02em;
+  --font-body-lg: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --text-body-lg: 16px;
+  --text-body-lg--line-height: 24px;
+  --text-body-lg--font-weight: 400;
+  --font-body-md: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --text-body-md: 14px;
+  --text-body-md--line-height: 20px;
+  --text-body-md--font-weight: 400;
+  --font-body-sm: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --text-body-sm: 12px;
+  --text-body-sm--line-height: 18px;
+  --text-body-sm--font-weight: 400;
+  --font-label-lg: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --text-label-lg: 14px;
+  --text-label-lg--line-height: 20px;
+  --text-label-lg--font-weight: 600;
+  --font-label-md: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --text-label-md: 12px;
+  --text-label-md--line-height: 16px;
+  --text-label-md--font-weight: 600;
+  --text-label-md--letter-spacing: 0.01em;
+  --font-label-caps: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --text-label-caps: 11px;
+  --text-label-caps--line-height: 16px;
+  --text-label-caps--font-weight: 700;
+  --text-label-caps--letter-spacing: 0.05em;
+  --spacing-gutter: 1.5rem;
+  --spacing-gutter-mobile: 1rem;
+  --spacing-margin: 2rem;
+  --spacing-margin-mobile: 1rem;
+  --spacing-space-xs: 0.25rem;
+  --spacing-space-sm: 0.5rem;
+  --spacing-space-md: 1rem;
+  --spacing-space-lg: 1.5rem;
+  --spacing-space-xl: 2rem;
+}
+
+html, body, #root { min-height: 100%; }
+body { margin: 0; background: var(--color-surface); color: var(--color-on-surface); font-family: Inter, ui-sans-serif, system-ui, sans-serif; font-size: 14px; line-height: 20px; -webkit-font-smoothing: antialiased; }
+button { cursor: pointer; }
+button:disabled { cursor: not-allowed; }
+.material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; line-height: 1; user-select: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+@media print { aside, .no-print { display: none !important; } main { margin: 0 !important; } }

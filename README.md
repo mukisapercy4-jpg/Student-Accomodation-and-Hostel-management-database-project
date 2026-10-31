@@ -80,3 +80,13 @@ Before deployment, review `docs/MYSQL_LEAST_PRIVILEGE.md`,
 design documentation only and has not been executed. Do not run migrations or
 SQL against the production MySQL database until the migration and deployment
 plan have been separately reviewed and approved.
+
+## Stitch screens wired to the live API
+The React UI follows the Stitch export (`frontend/src/index.css` holds its design tokens). Screens by role: Login; Admin and
+ReadOnly overview (`/api/dashboard/`, `/api/audit-logs/`); Warden overview and Caretaker operations (hostel-scoped with
+`?hostel=<id>`); Student portal (own bookings, payments, maintenance, visitors). Other sidebar items open a generic list page
+(search, filters, paging, details, CSV, forms). Design elements with no database source (blocks/wings, bed numbers, artisan
+trades, curfew, shift notes, user management, settings, notifications) were left out rather than invented.
+Backend additions: `?hostel=` filter on bookings/payments/maintenance/visitors; payment settlement + channel breakdown on the
+dashboard; students may read/create their own maintenance requests and visitors; `/auth/me/` returns the student profile and,
+for staff, the staff row/hostel matched by e-mail (display only). `seed_demo_users` also creates `demo_caretaker`.

@@ -38,12 +38,12 @@ export default function RoomCard({ room, onSelect, actionLabel = 'Details' }) {
   const over = capacity > 0 && filled > capacity;
 
   return (
-    <article className="flex min-w-0 flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+    <article className="flex min-w-0 flex-col gap-3 rounded-xl border border-outline-variant bg-surface-container-lowest p-4 shadow-sm">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="truncate text-[11px] font-semibold uppercase tracking-wide text-slate-400">{room.hostel_name}</p>
-          <p className="flex items-center gap-2 text-base font-extrabold text-slate-800">
-            <BedDouble size={16} className="shrink-0 text-slate-400" aria-hidden="true" />
+          <p className="truncate text-[11px] font-semibold uppercase tracking-wide text-outline">{room.hostel_name}</p>
+          <p className="flex items-center gap-2 text-base font-extrabold text-on-surface">
+            <BedDouble size={16} className="shrink-0 text-outline" aria-hidden="true" />
             Room {room.room_number}
           </p>
         </div>
@@ -55,8 +55,8 @@ export default function RoomCard({ room, onSelect, actionLabel = 'Details' }) {
 
       <div>
         <div className="mb-1.5 flex items-baseline justify-between text-xs">
-          <span className="font-semibold text-slate-600">{filled}/{capacity} Beds Filled</span>
-          <span className="text-slate-400">{pct}%</span>
+          <span className="font-semibold text-on-surface-variant">{filled}/{capacity} Beds Filled</span>
+          <span className="text-outline">{pct}%</span>
         </div>
         <div role="progressbar" aria-label={`Beds filled in room ${room.room_number}`}
           aria-valuemin={0} aria-valuemax={capacity} aria-valuenow={Math.min(filled, capacity)}
@@ -68,8 +68,8 @@ export default function RoomCard({ room, onSelect, actionLabel = 'Details' }) {
       </div>
 
       <div className="mt-auto flex items-center justify-between border-t border-slate-100 pt-3">
-        <span className="text-sm font-bold text-slate-800">{money(room.price_per_semester)}
-          <span className="font-medium text-slate-400"> / semester</span></span>
+        <span className="text-sm font-bold text-on-surface">{money(room.price_per_semester)}
+          <span className="font-medium text-outline"> / semester</span></span>
         {onSelect && (
           <button type="button" onClick={() => onSelect(room)}
             className="rounded-lg px-2.5 py-1.5 text-xs font-bold text-blue-600 hover:bg-blue-50 focus-visible:outline-2 focus-visible:outline-blue-500">

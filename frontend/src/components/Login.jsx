@@ -1,124 +1,117 @@
 import { useState } from 'react';
 import PropTypes from 'prop-types';
-import { Eye, EyeOff, Loader2, Lock, User } from 'lucide-react';
 import { api, tokenStore } from '../api.js';
+import { Icon, cx } from '../ui.jsx';
 
-// Full-screen photo: drop your picture at src/assets/login-bg.jpg (.jpeg/.png/.webp also work).
-// Without one, a soft green gradient is used so the page never shows a broken image.
-const found = import.meta.glob('../assets/login-bg.{jpg,jpeg,png,webp}', { eager: true, import: 'default' });
-const BG = Object.values(found)[0];
-
-// Quick Access demo accounts: dev builds always; a staging/investor build can opt in with
-// VITE_SHOW_DEMO_ACCOUNTS=true. They are NEVER in a normal production bundle.
+// Quick-fill buttons: dev builds always; a staging build can opt in with VITE_SHOW_DEMO_ACCOUNTS=true.
+// The accounts come from `python manage.py seed_demo_users` (DEBUG only), never from real data.
 const SHOW_DEMO = import.meta.env.DEV || import.meta.env.VITE_SHOW_DEMO_ACCOUNTS === 'true';
-const DEMO_PASSWORD = 'demo-pass-123'; // created by `python manage.py seed_demo_users` (DEBUG only)
+const DEMO_PASSWORD = 'demo-pass-123';
 const DEMO = SHOW_DEMO ? [
-  { label: 'Student Demo', username: 'demo_student', hint: 'Click to auto-fill sample student credentials' },
-  { label: 'Manager Demo', username: 'demo_manager', hint: 'Click to auto-fill hostel manager credentials' },
-  { label: 'Admin Demo', username: 'demo_admin', hint: 'Click to auto-fill super admin credentials' },
+  { label: 'Super Admin', username: 'demo_admin', dot: 'bg-primary-container' },
+  { label: 'Hall Warden', username: 'demo_manager', dot: 'bg-secondary' },
+  { label: 'Chief Caretaker', username: 'demo_caretaker', dot: 'bg-status-pending' },
+  { label: 'Estate Auditor', username: 'demo_readonly', dot: 'bg-tertiary' },
+  { label: 'Student Resident', username: 'demo_student', dot: 'bg-status-available' },
 ] : [];
 
-const input = 'w-full rounded-full border border-slate-200 bg-sky-50/90 py-3 pl-11 pr-4 text-sm text-slate-800 placeholder-slate-400 outline-none focus:border-emerald-700 focus:ring-2 focus:ring-emerald-700/30';
+const field = 'w-full rounded-lg border-0 bg-surface-container-low py-3 pl-11 pr-4 text-body-lg text-on-surface outline-none ring-1 ring-inset ring-outline-variant focus:ring-2 focus:ring-primary-container';
 
-/**
- * Role-aware sign-in. The API decides the role (STUDENT | MANAGER | SUPER_ADMIN | ...), so the
- * person only types who they are; onLogin receives the response (role, home, permissions, ...).
- */
-export default function Login({ onLogin }) {
+/** Sign-in (Stitch "unified login"). The API decides the role and home screen; onLogin gets /auth/token/ + /auth/me/. */
+export default function Login({ onLogin, notice }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [show, setShow] = useState(false);
   const [remember, setRemember] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  const [hint, setHint] = useState('');
-
-  const fill = (d) => { setUsername(d.username); setPassword(DEMO_PASSWORD); setError(''); };
+  const [help, setHelp] = useState(false);
 
   const submit = async (e) => {
     e.preventDefault();
     if (busy) return;
-    if (!username.trim() || !password) { setError('Enter your email or student ID and your password.'); return; }
+    if (!username.trim() || !password) { setError('Enter your username, email or registration number, and your password.'); return; }
     setBusy(true); setError('');
     try {
       const data = await api('/auth/token/', { method: 'POST', body: JSON.stringify({ username: username.trim(), password }) });
       tokenStore.setPair({ access: data.access, refresh: data.refresh }, remember);
       onLogin(data);
     } catch (err) {
-      setError(err.status === 401 || err.status === 400
-        ? 'Sign-in failed. Check your details and try again.'
-        : (err.message || 'Sign-in failed.'));
+      setError(err.status === 401 || err.status === 400 ? 'Sign-in failed. Check your details and try again.' : (err.message || 'Sign-in failed.'));
     } finally { setBusy(false); }
   };
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-gradient-to-br from-emerald-950 via-emerald-900 to-slate-800 bg-cover bg-center p-4"
-      style={BG ? { backgroundImage: `url(${BG})` } : undefined}>
-      <div className="absolute inset-0 bg-slate-950/25" aria-hidden="true" />
-
-      {DEMO.length > 0 && (
-        <div className="absolute left-1/2 top-3 z-20 w-[calc(100%-1.5rem)] max-w-lg -translate-x-1/2 rounded-xl border border-blue-300/40 bg-blue-900/90 p-2.5 text-center shadow-xl backdrop-blur"
-          role="group" aria-label="Quick Access Demo Accounts">
-          <p className="mb-2 text-[10px] font-extrabold uppercase tracking-wider text-white sm:text-xs">Developer tools: Quick Access Demo Accounts (dev only)</p>
-          <div className="flex flex-wrap justify-center gap-2">
-            {DEMO.map((d) => (
-              <button key={d.username} type="button" onClick={() => fill(d)}
-                onMouseEnter={() => setHint(d.hint)} onMouseLeave={() => setHint('')} onFocus={() => setHint(d.hint)} onBlur={() => setHint('')}
-                className="rounded-md border border-blue-200/70 bg-blue-800/60 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 focus-visible:outline-2 focus-visible:outline-white">
-                [{d.label}]
-              </button>
-            ))}
+    <div className="grid min-h-screen bg-surface lg:grid-cols-[1.05fr_1fr]">
+      <section className="relative hidden flex-col justify-between overflow-hidden bg-inverse-surface p-margin text-inverse-on-surface lg:flex">
+        <div className="absolute -bottom-40 -left-40 h-[32rem] w-[32rem] rounded-full bg-primary-container/20 blur-3xl" aria-hidden="true" />
+        <div className="relative">
+          <div className="flex items-center gap-space-md">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary-container"><Icon n="apartment" className="text-[26px] text-on-primary" /></div>
+            <div><span className="font-headline-md text-headline-md text-surface-container-lowest">SAHMS</span>
+              <p className="text-body-md text-tertiary-fixed-dim">Student Accommodation &amp; Hostel Management System</p></div>
           </div>
-          <p className="mt-1.5 min-h-4 text-[11px] text-blue-100" aria-live="polite">{hint}</p>
+          <p className="mt-space-xl font-label-caps text-label-caps uppercase tracking-wider text-primary-fixed-dim">Residence operating system</p>
+          <h1 className="mt-space-sm font-headline-xl text-headline-xl text-surface-container-lowest">Your Accommodation, Simplified.</h1>
+          <p className="mt-space-md max-w-lg text-body-lg text-tertiary-fixed-dim">Hostels, rooms, bookings, Mobile Money payments, maintenance and visitors in one place, backed by the live hostel database.</p>
+          <ul className="mt-space-xl grid gap-space-md text-body-md">
+            {[['shield', 'Role-based access: each person only sees what their role allows'], ['account_balance_wallet', 'Mobile Money (MTN / Airtel) and cash payments tracked against every booking'], ['history_edu', 'Audit trail of every change, with booking and payment status history']].map(([i, t]) => (
+              <li key={t} className="flex items-center gap-space-sm"><Icon n={i} className="text-[20px] text-primary-fixed-dim" />{t}</li>
+            ))}
+          </ul>
         </div>
-      )}
+        <p className="relative text-body-sm text-tertiary-fixed-dim">University Accommodation Management Platform</p>
+      </section>
 
-      <form onSubmit={submit} noValidate aria-label="Sign in"
-        className="relative z-10 mt-24 grid w-full max-w-sm gap-4 rounded-3xl border border-white/60 bg-white/60 p-7 shadow-2xl backdrop-blur-xl sm:mt-12">
-        <div className="flex items-center justify-center gap-2.5">
-          <span className="grid h-10 w-10 place-items-center rounded-xl bg-emerald-900 text-lg font-black text-white" aria-hidden="true">S</span>
-          <span className="text-2xl font-black tracking-wide text-emerald-900">SAHMS</span>
-        </div>
-        <div className="text-center">
-          <h1 className="text-3xl font-black tracking-tight text-slate-900">Welcome back.</h1>
-          <p className="mt-1 text-sm text-slate-600">Sign in to your account.</p>
-        </div>
+      <section className="flex items-center justify-center p-space-md sm:p-margin">
+        <form onSubmit={submit} noValidate aria-label="Sign in" className="grid w-full max-w-md gap-space-md rounded-xl bg-surface-container-lowest p-space-xl shadow-lg">
+          <div className="flex items-center gap-space-sm lg:hidden"><div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary-container"><Icon n="apartment" className="text-on-primary" /></div><span className="font-headline-sm text-headline-sm">SAHMS</span></div>
+          <div className="flex items-start justify-between gap-space-sm">
+            <div><h2 className="font-headline-md text-headline-md">Welcome Back</h2>
+              <p className="mt-1 text-body-md text-on-surface-variant">Sign in to your SAHMS administrative or residential workspace.</p></div>
+            <span className="hidden whitespace-nowrap rounded-full bg-primary-fixed px-3 py-1 text-label-md text-on-primary-fixed-variant sm:inline">Secure Gateway</span>
+          </div>
 
-        <label className="grid gap-1 text-xs font-semibold text-slate-600">Email or Student ID
-          <span className="relative block">
-            <User size={16} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" aria-hidden="true" />
-            <input className={input} type="text" autoComplete="username" value={username} onChange={(e) => setUsername(e.target.value)} />
-          </span>
-        </label>
+          {notice && <p role="status" className="rounded-lg bg-status-pending/15 p-space-sm px-space-md text-body-md text-momo-mtn-accent">{notice}</p>}
 
-        <label className="grid gap-1 text-xs font-semibold text-slate-600">Password
-          <span className="relative block">
-            <Lock size={16} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" aria-hidden="true" />
-            <input className={`${input} pr-11`} type={show ? 'text' : 'password'} autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
-            <button type="button" onClick={() => setShow((v) => !v)} aria-label={show ? 'Hide password' : 'Show password'}
-              className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-1 text-slate-500 hover:text-slate-800">
-              {show ? <EyeOff size={16} /> : <Eye size={16} />}
-            </button>
-          </span>
-        </label>
+          <label className="grid gap-1 font-label-lg text-label-lg">
+            <span className="flex justify-between">Username, email or Reg No.<span className="text-body-sm font-normal text-outline">e.g. 23/U/10492</span></span>
+            <span className="relative block"><Icon n="person" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[20px] text-outline" />
+              <input className={field} autoComplete="username" value={username} onChange={(e) => setUsername(e.target.value)} /></span>
+          </label>
 
-        <label className="flex items-center gap-2 text-xs text-slate-600">
-          <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} className="h-3.5 w-3.5 accent-emerald-800" />
-          Remember me
-        </label>
+          <label className="grid gap-1 font-label-lg text-label-lg">
+            <span className="flex justify-between">Password
+              <button type="button" onClick={() => setHelp((v) => !v)} className="border-0 bg-transparent p-0 font-label-md text-primary hover:underline">Forgot password?</button></span>
+            <span className="relative block"><Icon n="lock" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[20px] text-outline" />
+              <input className={cx(field, 'pr-11')} type={show ? 'text' : 'password'} autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
+              <button type="button" onClick={() => setShow((v) => !v)} aria-label={show ? 'Hide password' : 'Show password'} className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full border-0 bg-transparent p-1 text-outline hover:text-on-surface"><Icon n={show ? 'visibility_off' : 'visibility'} className="text-[20px]" /></button></span>
+          </label>
+          {help && <p role="note" className="rounded-lg bg-surface-container-low p-space-sm px-space-md text-body-sm text-on-surface-variant">Passwords are reset by the university residence administration. Please contact your hall warden or the system administrator.</p>}
 
-        {error && <p role="alert" className="rounded-lg border border-rose-300 bg-rose-50 p-2.5 text-xs text-rose-700">{error}</p>}
+          <label className="flex items-center gap-space-sm text-body-md"><input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} className="h-4 w-4 accent-primary-container" />Remember session on this device</label>
 
-        <button type="submit" disabled={busy}
-          className="inline-flex items-center justify-center gap-2 rounded-full bg-emerald-900 px-4 py-3 text-sm font-bold text-white hover:bg-emerald-800 disabled:opacity-60">
-          {busy && <Loader2 size={16} className="animate-spin" aria-hidden="true" />}
-          {busy ? 'Signing in…' : 'Sign In'}
-        </button>
+          {error && <p role="alert" className="rounded-lg bg-error-container p-space-sm px-space-md text-body-md text-on-error-container">{error}</p>}
 
-        <p className="text-center text-xs text-slate-600">Need an account? Contact your administration or warden.</p>
-      </form>
+          <button type="submit" disabled={busy} className="inline-flex h-12 items-center justify-center gap-space-sm rounded-lg bg-primary text-label-lg font-label-lg text-on-primary transition-all hover:bg-primary-container active:scale-[0.99] disabled:opacity-60">
+            {busy ? 'Signing in…' : 'Sign In to Portal'}{!busy && <Icon n="arrow_forward" className="text-[20px]" />}
+          </button>
+
+          {DEMO.length > 0 && (
+            <div className="rounded-lg bg-primary-fixed/50 p-space-md" role="group" aria-label="Dev quick-fill">
+              <p className="mb-space-sm flex justify-between font-label-caps text-label-caps uppercase text-on-surface-variant">Dev quick-fill <span className="text-primary">dev builds only</span></p>
+              <div className="flex flex-wrap gap-space-sm">
+                {DEMO.map((d) => (
+                  <button key={d.username} type="button" onClick={() => { setUsername(d.username); setPassword(DEMO_PASSWORD); setError(''); }}
+                    className="inline-flex items-center gap-space-xs rounded-lg border-0 bg-surface-container-lowest px-3 py-1.5 text-label-md shadow-sm hover:bg-surface-container">
+                    <span className={cx('h-2 w-2 rounded-full', d.dot)} />{d.label}</button>
+                ))}
+              </div>
+            </div>
+          )}
+        </form>
+      </section>
     </div>
   );
 }
-
-Login.propTypes = { onLogin: PropTypes.func.isRequired };
+Login.propTypes = { onLogin: PropTypes.func.isRequired, notice: PropTypes.string };

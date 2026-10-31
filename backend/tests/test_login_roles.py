@@ -58,7 +58,7 @@ class SeedDemoUsersTests(SAHMSTestCase):
     def test_creates_working_demo_accounts_and_is_repeatable(self):
         for _ in range(2):
             call_command("seed_demo_users", stdout=io.StringIO())
-        self.assertEqual(User.objects.filter(username__startswith="demo_").count(), 4)
+        self.assertEqual(User.objects.filter(username__startswith="demo_").count(), 5)
         for user, role, code in (("demo_manager", "Warden", "MANAGER"), ("demo_admin", "Admin", "SUPER_ADMIN"),
                                  ("demo_readonly", "ReadOnly", "READ_ONLY")):
             r = APIClient().post(LOGIN, {"username": user, "password": DEMO_PASSWORD, "role": role}, format="json")
