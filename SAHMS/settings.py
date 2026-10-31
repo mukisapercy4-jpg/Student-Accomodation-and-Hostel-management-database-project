@@ -33,7 +33,7 @@ def _env_list(name, default):
 
 
 # Comma-separated in .env for deployment, e.g. ALLOWED_HOSTS=hostel.example.com
-ALLOWED_HOSTS = _env_list("ALLOWED_HOSTS", ["127.0.0.1", "localhost", ".onrender.com", ".vercel.app"])
+ALLOWED_HOSTS = _env_list("ALLOWED_HOSTS", ["127.0.0.1", "localhost", ".onrender.com", ".vercel.app", ".railway.app"])
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -164,6 +164,12 @@ USE_TZ = True
 
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
+
+# Include the Vite build output so WhiteNoise can serve JS/CSS/assets
+STATICFILES_DIRS = []
+_frontend_assets = BASE_DIR / "frontend" / "dist" / "assets"
+if _frontend_assets.is_dir():
+    STATICFILES_DIRS.append(_frontend_assets)
 
 STORAGES = {
     "default": {
